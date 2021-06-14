@@ -37,7 +37,7 @@
 
 static int _mixer_close(struct mixer *m);
 
-static char *names[SOUND_MIXER_NRDEVICES] = SOUND_DEVICE_NAMES;
+static const char *names[SOUND_MIXER_NRDEVICES] = SOUND_DEVICE_NAMES;
 
 /*
  * Open a mixer device in `/dev/mixerN`, where N is the number of the mixer 
@@ -67,7 +67,7 @@ mixer_open(const char *name)
 		if (strncmp(name, BASEPATH, strlen(name)) == 0)
 			goto default_unit;
 		m->unit = strtol(name + strlen(BASEPATH), NULL, 10);
-		(void)strncpy(m->name, name, sizeof(m->name));
+		(void)strlcpy(m->name, name, sizeof(m->name));
 	} else {
 default_unit:
 		if ((m->unit = mixer_get_default_unit()) < 0)
@@ -108,24 +108,24 @@ default_unit:
 		dp->rmute = 0;
 		dp->f_pbk = !M_ISREC(m, i);
 		dp->f_rec = M_ISREC(m, i);
-		(void)strncpy(dp->name, names[i], sizeof(dp->name));
+		(void)strlcpy(dp->name, names[i], sizeof(dp->name));
 		TAILQ_INSERT_TAIL(&m->devs, dp, devs);
 	}
 	/* The default device is always "vol". */
 	m->dev = TAILQ_FIRST(&m->devs);
 
-	return m;
+	return (m);
 fail:
 	if (m != NULL)
 		(void)mixer_close(m);
 
-	return NULL;
+	return (NULL);
 }
 
 int
 mixer_close(struct mixer *m)
 {
-	return _mixer_close(m);
+	return (_mixer_close(m));
 }
 
 /*
@@ -134,23 +134,24 @@ mixer_close(struct mixer *m)
  * manipulated at a time -- this is what the `dev` field is for. Each
  * time we want to manipulate a device, `dev` has to point to it first.
  *
+ * The caller has to assign the return value to `m->dev`.
+ *
+ * @arg: `name`: device name (e.g vol, pcm, ...)
  * @arg: `flags`: m->devmask / m->recmask / m->recsrc
  */
-int
+struct mix_dev *
 mixer_seldevbyname(struct mixer *m, const char *name, int flags)
 {
 	struct mix_dev *dp;
 
 	TAILQ_FOREACH(dp, &m->devs, devs) {
 		if (M_ISSET(dp->devno, flags)
-		&& !strncmp(dp->name, name, sizeof(dp->name))) {
-			m->dev = dp;
-			return 0;
-		}
+		&& !strncmp(dp->name, name, sizeof(dp->name)))
+			return (dp);
 	}
 	errno = EINVAL;
 
-	return -1;
+	return (NULL);
 }
 
 /*
@@ -172,9 +173,9 @@ mixer_chvol(struct mixer *m, int l, int r)
 	m->dev->rvol = r;
 	l |= r << 8;
 	if (ioctl(m->fd, MIXER_WRITE(m->dev->devno), &l) < 0)
-		return -1;
+		return (-1);
 
-	return 0;
+	return (0);
 }
 
 /*
@@ -199,14 +200,14 @@ mixer_modrecsrc(struct mixer *m, int opt)
 		break;
 	default:
 		errno = EINVAL;
-		return -1;
+		return (-1);
 	}
 	if (ioctl(m->fd, SOUND_MIXER_WRITE_RECSRC, &m->recsrc) < 0)
-		return -1;
+		return (-1);
 	if (ioctl(m->fd, SOUND_MIXER_READ_RECSRC, &m->recsrc) < 0)
-		return -1;
+		return (-1);
 
-	return 0;
+	return (0);
 }
 
 /*
@@ -221,9 +222,9 @@ mixer_get_default_unit(void)
 
 	size = sizeof(int);
 	if (sysctlbyname("hw.snd.default_unit", &unit, &size, NULL, 0) < 0)
-		return -1;
+		return (-1);
 
-	return unit;
+	return (unit);
 }
 
 /*
@@ -240,10 +241,10 @@ mixer_set_default_unit(struct mixer *m, int unit)
 
 	size = sizeof(int);
 	if (sysctlbyname("hw.snd.default_unit", NULL, 0, &unit, size) < 0)
-		return -1;
+		return (-1);
 	m->f_default = m->unit == unit;
 
-	return 0;
+	return (0);
 }
 
 /*
@@ -263,5 +264,5 @@ _mixer_close(struct mixer *m)
 	}
 	free(m);
 
-	return r;
+	return (r);
 }

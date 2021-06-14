@@ -170,7 +170,8 @@ main(int argc, char *argv[])
 				dusage = 1;
 				break;
 			}
-			if (mixer_seldevbyname(m, argv[1], m->recmask) < 0) {
+			if ((m->dev = mixer_seldevbyname(m, argv[1], 
+			    m->recmask)) == NULL) {
 				warnx("unkown recording revice: %s", argv[1]);
 				dusage = 1;
 				break;
@@ -202,7 +203,8 @@ main(int argc, char *argv[])
 
 		if ((t = sscanf(*argv, "%d:%d", &l, &r)) > 0)
 			;	/* nothing */
-		else if (mixer_seldevbyname(m, *argv, m->devmask) < 0) {
+		else if ((m->dev = mixer_seldevbyname(m, *argv, 
+		    m->devmask)) == NULL) {
 			warnx("unkown device: %s", *argv);
 			dusage = 1;
 			break;

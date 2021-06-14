@@ -44,8 +44,8 @@ __FBSDID("$FreeBSD$");
 struct mix_dev {
 	char name[NAME_MAX];
 	int devno;
-	int lvol;
-	int rvol;
+	short lvol;
+	short rvol;
 	int lmute;
 	int rmute;
 	//int rate;
@@ -71,7 +71,7 @@ struct mixer {
 
 struct mixer *mixer_open(const char *);
 int mixer_close(struct mixer *);
-int mixer_seldevbyname(struct mixer *, const char *, int);
+struct mix_dev *mixer_seldevbyname(struct mixer *, const char *, int);
 int mixer_chvol(struct mixer *, int, int);
 int mixer_modrecsrc(struct mixer *, int);
 int mixer_get_default_unit(void);

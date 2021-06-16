@@ -1,5 +1,5 @@
 /*-
- * Copyright (c) 2021 Christos Margiolis <christos@freebsd.org>
+ * Copyright (c) 2021 Christos Margiolis <christos@FreeBSD.org>
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -102,8 +102,12 @@ default_unit:
 		if (ioctl(m->fd, MIXER_READ(i), &v) < 0)
 			goto fail;
 		dp->devno = i;
-		dp->lvol = v & 0x7f;
-		dp->rvol = (v >> 8) & 0x7f;
+		dp->lvol = M_VOLNORM(v & 0x7f);
+		dp->rvol = M_VOLNORM((v >> 8) & 0x7f);
+		/* 
+		 * TODO: find a way to know if it's already muted 
+		 * or not, this doesn't make sense 
+		 */
 		dp->lmute = 0;
 		dp->rmute = 0;
 		dp->f_pbk = !M_ISREC(m, i);
@@ -156,23 +160,23 @@ mixer_seldevbyname(struct mixer *m, const char *name, int flags)
 
 /*
  * Change the mixer's left and right volume. The allowed volume values are
- * between 0 and 100 and are stored as `lvol | rvol << 8`.
+ * between M_VOLMIN and M_VOLMAX and are stored as `lvol | rvol << 8`.
+ *
+ * TODO update comment
  */
 int
-mixer_chvol(struct mixer *m, int l, int r)
+mixer_chvol(struct mixer *m, float l, float r)
 {
-	if (l < 0)
-		l = 0;
-	else if (l > 100)
-		l = 100;
-	if (r < 0)
-		r = 0;
-	else if (r > 100)
-		r = 100;
+	int v;
+
+	if (l < M_VOLMIN || l > M_VOLMAX || r < M_VOLMIN || r > M_VOLMAX) {
+		errno = ERANGE;
+		return (-1);
+	}
 	m->dev->lvol = l;
 	m->dev->rvol = r;
-	l |= r << 8;
-	if (ioctl(m->fd, MIXER_WRITE(m->dev->devno), &l) < 0)
+	v = M_VOLDENORM(l) | M_VOLDENORM(r) << 8;
+	if (ioctl(m->fd, MIXER_WRITE(m->dev->devno), &v) < 0)
 		return (-1);
 
 	return (0);

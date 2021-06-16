@@ -1,5 +1,5 @@
 /*-
- * Copyright (c) 2021 Christos Margiolis <christos@freebsd.org>
+ * Copyright (c) 2021 Christos Margiolis <christos@FreeBSD.org>
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -101,8 +101,8 @@ main(int argc, char *argv[])
 	struct mixer *m;
 	struct mix_dev *dp;
 	char lstr[8], rstr[8], *name = NULL;
+	float l, r, lrel, rrel;
 	int dusage = 0, drecsrc = 0, sflag = 0, Sflag = 0;
-	int l, r, lprev, rprev, lrel, rrel;
 	char ch, n, t, k, opt = 0;
 
 	/* FIXME: problems with -rec */
@@ -136,12 +136,12 @@ main(int argc, char *argv[])
 		n = 0;
 		TAILQ_FOREACH(dp, &m->devs, devs) {
 			if (sflag || Sflag) {
-				printf("%s%s%c%d:%d", n ? " " : "",
+				printf("%s%s%c%.2f:%.2f", n ? " " : "",
 				    dp->name, Sflag ? ':' : ' ',
 				    dp->lvol, dp->rvol);
 				n++;
 			} else
-				printf("Mixer %-8s is currently set to %3d:%d\n",
+				printf("Mixer %-8s is currently set to %.2f:%.2f\n",
 				    dp->name, dp->lvol, dp->rvol);
 		}
 		if (n && m->recmask)
@@ -201,7 +201,7 @@ main(int argc, char *argv[])
 			continue;
 		}
 
-		if ((t = sscanf(*argv, "%d:%d", &l, &r)) > 0)
+		if ((t = sscanf(*argv, "%f:%f", &l, &r)) > 0)
 			;	/* nothing */
 		else if ((m->dev = mixer_seldevbyname(m, *argv, 
 		    m->devmask)) == NULL) {
@@ -221,18 +221,18 @@ main(int argc, char *argv[])
 			if (k > 0) {
 				if (*lstr == '+' || *lstr == '-')
 					lrel = rrel = 1;
-				l = strtol(lstr, NULL, 10);
+				l = strtof(lstr, NULL);
 			}
 			if (k > 1) {
 				if (*rstr == '+' || *rstr == '-')
 					rrel = 1;
-				r = strtol(rstr, NULL, 10);
+				r = strtof(rstr, NULL);
 			}
 		}
 
 		switch (argc > 1 ? k : t) {
 		case 0:
-			printf("Mixer %-8s is currently set to %3d:%d\n",
+			printf("Mixer %-8s is currently set to %.2f:%.2f\n",
 			    m->dev->name, m->dev->lvol, m->dev->rvol);
 			argc--;
 			argv++;
@@ -240,25 +240,27 @@ main(int argc, char *argv[])
 		case 1:
 			r = l; /* FALLTHROUGH */
 		case 2:
-			/* 
-			 * Keep the previous volume so we don't have to clump
-			 * it manually before we print it in case the user gives a
-			 * value < 0 or > 100.
-			 */
-			lprev = m->dev->lvol;
-			rprev = m->dev->rvol;
 			if (lrel)
 				l += m->dev->lvol;
 			if (rrel)
 				r += m->dev->rvol;
+
+			if (l < M_VOLMIN)
+				l = M_VOLMIN;
+			else if (l > M_VOLMAX)
+				l = M_VOLMAX;
+			if (r < M_VOLMIN)
+				r = M_VOLMIN;
+			else if (r > M_VOLMAX)
+				r = M_VOLMAX;
 			if (mixer_chvol(m, l, r) < 0) {
 				warnx("cannot change volume");
 				break;
 			}
 			if (!Sflag)
-				printf("Setting the mixer %s from %d:%d to %d:%d\n",
-				   m->dev->name, lprev, rprev,
-				   m->dev->lvol, m->dev->rvol);
+				printf("Setting the mixer %s from %.2f:%.2f "
+				   "to %.2f:%.2f\n",
+				   m->dev->name, m->dev->lvol, m->dev->rvol, l, r);
 			argc -= 2;
 			argv += 2;
 		}

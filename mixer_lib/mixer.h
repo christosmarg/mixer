@@ -1,5 +1,5 @@
 /*-
- * Copyright (c) 2021 Christos Margiolis <christos@freebsd.org>
+ * Copyright (c) 2021 Christos Margiolis <christos@FreeBSD.org>
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -30,11 +30,17 @@ __FBSDID("$FreeBSD$");
 #include <sys/soundcard.h>
 
 #include <limits.h>
+#include <math.h>
 
 #define M_ADDRECDEV		0x01
 #define M_REMOVERECDEV		0x02
 #define M_SETRECDEV		0x04
 #define M_TOGGLERECDEV		0x08
+
+#define M_VOLMIN		0.0f
+#define M_VOLMAX		1.0f
+#define M_VOLNORM(v)		((v) / 100.0f)
+#define M_VOLDENORM(v)		((int)roundf((v) * 100.0f))
 
 #define M_ISSET(n, f)		((1 << (n)) & (f))
 #define M_ISDEV(m, n)		M_ISSET(n, (m)->devmask)
@@ -44,8 +50,8 @@ __FBSDID("$FreeBSD$");
 struct mix_dev {
 	char name[NAME_MAX];
 	int devno;
-	short lvol;
-	short rvol;
+	float lvol;
+	float rvol;
 	int lmute;
 	int rmute;
 	//int rate;
@@ -72,7 +78,7 @@ struct mixer {
 struct mixer *mixer_open(const char *);
 int mixer_close(struct mixer *);
 struct mix_dev *mixer_seldevbyname(struct mixer *, const char *, int);
-int mixer_chvol(struct mixer *, int, int);
+int mixer_chvol(struct mixer *, float, float);
 int mixer_modrecsrc(struct mixer *, int);
 int mixer_get_default_unit(void);
 int mixer_set_default_unit(struct mixer *, int);

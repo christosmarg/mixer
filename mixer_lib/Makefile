@@ -5,5 +5,6 @@ SRCS=		${LIB}.c
 INCS=		${LIB}.h
 MAN=		${LIB}.3
 CFLAGS+=	-pedantic -Wall -Wunused
+LDFLAGS+=	-lm
 
 .include <bsd.lib.mk>

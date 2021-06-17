@@ -44,7 +44,7 @@ static const char *names[SOUND_MIXER_NRDEVICES] = SOUND_DEVICE_NAMES;
  * file. Each device maps to an actual pcmN audio card, so `/dev/mixer0` 
  * is the mixer device for pcm0, and so on.
  *
- * @arg: `name`: path to a mixer device. If it's NULL or "/dev/mixer", 
+ * @param: `name`: path to a mixer device. If it's NULL or "/dev/mixer", 
  *	we open the default mixer (i.e `hw.snd.default_unit`).
  */
 struct mixer *
@@ -82,15 +82,11 @@ default_unit:
 	/* The unit number _must_ be set before the ioctl. */
 	m->mi.dev = m->unit;
 	m->ci.card = m->unit;
-	if (ioctl(m->fd, SNDCTL_MIXERINFO, &m->mi) < 0)
-		goto fail;
-	if (ioctl(m->fd, SNDCTL_CARDINFO, &m->ci) < 0)
-		goto fail;
-	if (ioctl(m->fd, SOUND_MIXER_READ_DEVMASK, &m->devmask) < 0)
-		goto fail;
-	if (ioctl(m->fd, SOUND_MIXER_READ_RECMASK, &m->recmask) < 0)
-		goto fail;
-	if (ioctl(m->fd, SOUND_MIXER_READ_RECSRC, &m->recsrc) < 0)
+	if (ioctl(m->fd, SNDCTL_MIXERINFO, &m->mi) < 0 || 
+	    ioctl(m->fd, SNDCTL_CARDINFO, &m->ci) < 0 || 
+	    ioctl(m->fd, SOUND_MIXER_READ_DEVMASK, &m->devmask) < 0 || 
+	    ioctl(m->fd, SOUND_MIXER_READ_RECMASK, &m->recmask) < 0 ||
+	    ioctl(m->fd, SOUND_MIXER_READ_RECSRC, &m->recsrc) < 0)
 		goto fail;
 
 	TAILQ_INIT(&m->devs);
@@ -140,8 +136,8 @@ mixer_close(struct mixer *m)
  *
  * The caller has to assign the return value to `m->dev`.
  *
- * @arg: `name`: device name (e.g vol, pcm, ...)
- * @arg: `flags`: m->devmask / m->recmask / m->recsrc
+ * @param: `name`: device name (e.g vol, pcm, ...)
+ * @param: `flags`: m->devmask / m->recmask / m->recsrc
  */
 struct mix_dev *
 mixer_seldevbyname(struct mixer *m, const char *name, int flags)
@@ -160,9 +156,14 @@ mixer_seldevbyname(struct mixer *m, const char *name, int flags)
 
 /*
  * Change the mixer's left and right volume. The allowed volume values are
- * between M_VOLMIN and M_VOLMAX and are stored as `lvol | rvol << 8`.
+ * between M_VOLMIN and M_VOLMAX. The `ioctl` for volume change requires
+ * an integer value between 0 and 100 stored as `lvol | rvol << 8` --  for
+ * that reason, we de-normalize the 32-bit float volume value, before
+ * we pass it to the `ioctl`.
  *
- * TODO update comment
+ * If the volumes passed are not in the range `M_VOLMIN <= vol <= M_VOLMAX`,
+ * we return an error and `errno` is set to ERANGE. Volume clumping should
+ * be handlded by the caller.
  */
 int
 mixer_chvol(struct mixer *m, float l, float r)
@@ -180,6 +181,27 @@ mixer_chvol(struct mixer *m, float l, float r)
 		return (-1);
 
 	return (0);
+}
+
+/*
+ * TODO: Change panning.
+ *
+ * @param: `pan`: Panning value. It has to be in the range
+ *	`M_PANMIN <= pan <= M_PANMAX`.
+ */
+int
+mixer_chpan(struct mixer *m, float pan)
+{
+	int l, r;
+
+	if (pan < M_PANMIN || pan > M_PANMAX) {
+		errno = ERANGE;
+		return (-1);
+	}
+	l = m->dev->lvol;
+	r = m->dev->rvol;
+
+	return (mixer_chvol(m, l, r));
 }
 
 /*
@@ -236,7 +258,7 @@ mixer_get_default_unit(void)
  * it's useful to have, so the caller can avoid having to manually use
  * the sysctl API.
  * 
- * @arg: `unit`: the audio card number (e.g pcm0, pcm1, ...).
+ * @param: `unit`: the audio card number (e.g pcm0, pcm1, ...).
  */
 int
 mixer_set_default_unit(struct mixer *m, int unit)

@@ -42,6 +42,9 @@ __FBSDID("$FreeBSD$");
 #define M_VOLNORM(v)		((v) / 100.0f)
 #define M_VOLDENORM(v)		((int)roundf((v) * 100.0f))
 
+#define M_PANMIN		(-1.0f)
+#define M_PANMAX		1.0f
+
 #define M_ISSET(n, f)		((1 << (n)) & (f))
 #define M_ISDEV(m, n)		M_ISSET(n, (m)->devmask)
 #define M_ISREC(m, n)		M_ISSET(n, (m)->recmask)
@@ -78,7 +81,9 @@ struct mixer {
 struct mixer *mixer_open(const char *);
 int mixer_close(struct mixer *);
 struct mix_dev *mixer_seldevbyname(struct mixer *, const char *, int);
+/* XXX: change names for ch* functions? */
 int mixer_chvol(struct mixer *, float, float);
+int mixer_chpan(struct mixer *, float);
 int mixer_modrecsrc(struct mixer *, int);
 int mixer_get_default_unit(void);
 int mixer_set_default_unit(struct mixer *, int);

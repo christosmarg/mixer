@@ -106,8 +106,10 @@ default_unit:
 		 */
 		dp->lmute = 0;
 		dp->rmute = 0;
+		/* XXX: is this correct? */
 		dp->f_pbk = !M_ISREC(m, i);
 		dp->f_rec = M_ISREC(m, i);
+		dp->f_src = M_ISRECSRC(m, i);
 		(void)strlcpy(dp->name, names[i], sizeof(dp->name));
 		TAILQ_INSERT_TAIL(&m->devs, dp, devs);
 	}
@@ -145,8 +147,8 @@ mixer_seldevbyname(struct mixer *m, const char *name, int flags)
 	struct mix_dev *dp;
 
 	TAILQ_FOREACH(dp, &m->devs, devs) {
-		if (M_ISSET(dp->devno, flags)
-		&& !strncmp(dp->name, name, sizeof(dp->name)))
+		if (M_ISSET(dp->devno, flags) && 
+		    !strncmp(dp->name, name, sizeof(dp->name)))
 			return (dp);
 	}
 	errno = EINVAL;
@@ -228,6 +230,7 @@ mixer_modrecsrc(struct mixer *m, int opt)
 		errno = EINVAL;
 		return (-1);
 	}
+	m->dev->f_src = M_ISRECSRC(m, m->dev->devno);
 	if (ioctl(m->fd, SOUND_MIXER_WRITE_RECSRC, &m->recsrc) < 0)
 		return (-1);
 	if (ioctl(m->fd, SOUND_MIXER_READ_RECSRC, &m->recsrc) < 0)
@@ -271,6 +274,26 @@ mixer_set_default_unit(struct mixer *m, int unit)
 	m->f_default = m->unit == unit;
 
 	return (0);
+}
+
+/*
+ * Get the total number of mixers in the system.
+ */
+int
+mixer_get_nmixers(void)
+{
+	struct mixer *m;
+	oss_sysinfo si;
+
+	if ((m = mixer_open(NULL)) == NULL)
+		return (-1);
+	if (ioctl(m->fd, OSS_SYSINFO, &si) < 0) {
+		(void)mixer_close(m);
+		return (-1);
+	}
+	(void)mixer_close(m);
+
+	return (si.nummixers);
 }
 
 /*

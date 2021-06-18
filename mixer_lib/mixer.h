@@ -23,6 +23,8 @@
 #ifndef _MIXER_H_
 #define _MIXER_H_
 
+__BEGIN_DECLS
+
 #include <sys/cdefs.h>
 __FBSDID("$FreeBSD$");
 
@@ -61,6 +63,7 @@ struct mix_dev {
 	//int samples;
 	int f_pbk;
 	int f_rec;
+	int f_src;
 	TAILQ_ENTRY(mix_dev) devs;
 };
 
@@ -87,5 +90,9 @@ int mixer_chpan(struct mixer *, float);
 int mixer_modrecsrc(struct mixer *, int);
 int mixer_get_default_unit(void);
 int mixer_set_default_unit(struct mixer *, int);
+int mixer_get_nmixers(void);
+/* TODO: get mixer/card total number */
+
+__END_DECLS
 
 #endif /* _MIXER_H_ */

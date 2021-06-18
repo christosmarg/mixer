@@ -57,6 +57,7 @@ struct mix_dev {
 	int devno;
 	float lvol;
 	float rvol;
+	float pan;
 	int lmute;
 	int rmute;
 	//int rate;

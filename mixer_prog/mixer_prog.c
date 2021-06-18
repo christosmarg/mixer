@@ -21,6 +21,7 @@
  */
 
 #include <err.h>
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -68,13 +69,14 @@ printmixer(struct mixer *m)
 static void
 printdev(struct mix_dev *d)
 {
-	printf("    %-10s%.2f:%.2f", d->name, d->lvol, d->rvol);
+	printf("    %-11s= %.2f:%.2f\t%+.2f\t", 
+	    d->name, d->lvol, d->rvol, d->pan);
 	if (d->f_pbk)
-	       printf("\t(playback)");
+	       printf(" pbk");
 	if (d->f_rec)
-	       printf("\t(rec)");
+	       printf(" rec");
 	if (d->f_src)
-		printf("\t(src)");
+		printf(" src");
 	printf("\n");
 }
 
@@ -83,7 +85,8 @@ main(int argc, char *argv[])
 {
 	struct mixer *m;
 	struct mix_dev *dp;
-	char lstr[8], rstr[8], *recstr, *name = NULL, buf[NAME_MAX];
+	char lstr[8], rstr[8], *recstr;
+	char *name = NULL, buf[NAME_MAX];
 	float l, r, lrel, rrel;
 	int dusage = 0, opt = 0, dunit;
 	int aflag = 0, dflag = 0, rflag = 0, sflag = 0;
@@ -97,6 +100,8 @@ main(int argc, char *argv[])
 			break;
 		case 'd':
 			dunit = strtol(optarg, NULL, 10);
+			if (errno == EINVAL || errno == ERANGE)
+				err(1, "strtol");
 			dflag = 1;
 			break;
 		case 'f':
@@ -128,6 +133,7 @@ main(int argc, char *argv[])
 			printall(m);
 			(void)mixer_close(m);
 		}
+		/* XXX: should we return here? */
 		return (0);
 	}
 
@@ -136,18 +142,15 @@ main(int argc, char *argv[])
 
 	while (!dusage) {
 		if (dflag) {
+			/* We don't want to get in here again. */
+			dflag = 0;
 			if (mixer_set_default_unit(m, dunit) < 0) {
 				warn("cannot set default unit to %d", dunit);
-				rc = 1;
-				goto done;
+				continue;
 			}
-			/* Reopen the mixer, but use the default path. */
-			(void)mixer_close(m);
-			if ((m = mixer_open(NULL)) == NULL)
-				err(1, "mixer_open");
 			printf("changed default unit to: %d\n", dunit);
-			dflag = 0;
 		} else if (rflag) {
+			rflag = 0;
 			if (*recstr != '+' && *recstr != '-' &&
 			    *recstr != '=' && *recstr != '^') {
 				warnx("unkown modifier: %c", *recstr);
@@ -175,7 +178,7 @@ main(int argc, char *argv[])
 			}
 			if ((m->dev = mixer_seldevbyname(m, recstr,
 			    m->recmask)) == NULL) {
-				warn("unkown recording revice: %s", recstr);
+				warn("unkown recording device: %s", recstr);
 				rc = 1;
 				goto done;
 			}
@@ -184,8 +187,6 @@ main(int argc, char *argv[])
 				rc = 1;
 				goto done;
 			}
-			/* We don't want to end up here again. */
-			rflag = 0;
 		} else if (sflag) {
 			if (!m->recmask)
 				goto done;

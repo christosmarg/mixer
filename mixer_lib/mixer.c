@@ -100,6 +100,7 @@ default_unit:
 		dp->devno = i;
 		dp->lvol = M_VOLNORM(v & 0x7f);
 		dp->rvol = M_VOLNORM((v >> 8) & 0x7f);
+		dp->pan = dp->rvol - dp->lvol;
 		/* 
 		 * TODO: find a way to know if it's already muted 
 		 * or not, this doesn't make sense 
@@ -213,6 +214,10 @@ mixer_chpan(struct mixer *m, float pan)
 int
 mixer_modrecsrc(struct mixer *m, int opt)
 {
+	if (!m->recmask) {
+		errno = ENODEV;
+		return (-1);
+	}
 	switch (opt) {
 	case M_ADDRECDEV:
 		m->recsrc |= (1 << m->dev->devno);
@@ -285,6 +290,10 @@ mixer_get_nmixers(void)
 	struct mixer *m;
 	oss_sysinfo si;
 
+	/* 
+	 * Open a dummy mixer because we need the `fd` field for the
+	 * `ioctl` to work.
+	 */
 	if ((m = mixer_open(NULL)) == NULL)
 		return (-1);
 	if (ioctl(m->fd, OSS_SYSINFO, &si) < 0) {

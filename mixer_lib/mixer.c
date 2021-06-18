@@ -140,16 +140,14 @@ mixer_close(struct mixer *m)
  * The caller has to assign the return value to `m->dev`.
  *
  * @param: `name`: device name (e.g vol, pcm, ...)
- * @param: `flags`: m->devmask / m->recmask / m->recsrc
  */
 struct mix_dev *
-mixer_seldevbyname(struct mixer *m, const char *name, int flags)
+mixer_seldevbyname(struct mixer *m, const char *name)
 {
 	struct mix_dev *dp;
 
 	TAILQ_FOREACH(dp, &m->devs, devs) {
-		if (M_ISSET(dp->devno, flags) && 
-		    !strncmp(dp->name, name, sizeof(dp->name)))
+		if (!strncmp(dp->name, name, sizeof(dp->name)))
 			return (dp);
 	}
 	errno = EINVAL;
@@ -214,7 +212,7 @@ mixer_chpan(struct mixer *m, float pan)
 int
 mixer_modrecsrc(struct mixer *m, int opt)
 {
-	if (!m->recmask) {
+	if (!m->recmask || !M_ISREC(m, m->dev->devno)) {
 		errno = ENODEV;
 		return (-1);
 	}
@@ -235,11 +233,11 @@ mixer_modrecsrc(struct mixer *m, int opt)
 		errno = EINVAL;
 		return (-1);
 	}
-	m->dev->f_src = M_ISRECSRC(m, m->dev->devno);
 	if (ioctl(m->fd, SOUND_MIXER_WRITE_RECSRC, &m->recsrc) < 0)
 		return (-1);
 	if (ioctl(m->fd, SOUND_MIXER_READ_RECSRC, &m->recsrc) < 0)
 		return (-1);
+	m->dev->f_src = M_ISRECSRC(m, m->dev->devno);
 
 	return (0);
 }

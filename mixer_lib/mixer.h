@@ -84,7 +84,7 @@ struct mixer {
 
 struct mixer *mixer_open(const char *);
 int mixer_close(struct mixer *);
-struct mix_dev *mixer_seldevbyname(struct mixer *, const char *, int);
+struct mix_dev *mixer_seldevbyname(struct mixer *, const char *);
 /* XXX: change names for ch* functions? */
 int mixer_chvol(struct mixer *, float, float);
 int mixer_chpan(struct mixer *, float);

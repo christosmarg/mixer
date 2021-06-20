@@ -54,7 +54,7 @@ mixer_open(const char *name)
 	struct mix_dev *dp;
 	int i, v;
 
-	if ((m = calloc(0, sizeof(struct mixer))) == NULL)
+	if ((m = calloc(1, sizeof(struct mixer))) == NULL)
 		goto fail;
 
 	if (name != NULL) {
@@ -72,19 +72,20 @@ mixer_open(const char *name)
 default_unit:
 		if ((m->unit = mixer_get_default_unit()) < 0)
 			goto fail;
-		(void)snprintf(m->name, sizeof(m->name), "/dev/mixer%d", m->unit);
+		(void)snprintf(m->name, sizeof(m->name) - 1, "/dev/mixer%d", m->unit);
 	}
 
-	if ((m->fd = open(m->name, O_RDWR, 0)) < 0)
+	if ((m->fd = open(m->name, O_RDWR)) < 0)
 		goto fail;
 
+	m->devmask = m->recmask = m->recsrc = 0;
 	m->f_default = m->unit == mixer_get_default_unit();
 	/* The unit number _must_ be set before the ioctl. */
 	m->mi.dev = m->unit;
 	m->ci.card = m->unit;
 	if (ioctl(m->fd, SNDCTL_MIXERINFO, &m->mi) < 0 || 
 	    ioctl(m->fd, SNDCTL_CARDINFO, &m->ci) < 0 || 
-	    ioctl(m->fd, SOUND_MIXER_READ_DEVMASK, &m->devmask) < 0 || 
+	    ioctl(m->fd, SOUND_MIXER_READ_DEVMASK, &m->devmask) < 0 ||
 	    ioctl(m->fd, SOUND_MIXER_READ_RECMASK, &m->recmask) < 0 ||
 	    ioctl(m->fd, SOUND_MIXER_READ_RECSRC, &m->recsrc) < 0)
 		goto fail;
@@ -93,9 +94,9 @@ default_unit:
 	for (i = 0; i < SOUND_MIXER_NRDEVICES; i++) {
 		if (!M_ISDEV(m, i) && !M_ISREC(m, i) && !M_ISRECSRC(m, i))
 			continue;
-		if ((dp = malloc(sizeof(struct mix_dev))) == NULL)
-			goto fail;
 		if (ioctl(m->fd, MIXER_READ(i), &v) < 0)
+			continue;
+		if ((dp = calloc(1, sizeof(struct mix_dev))) == NULL)
 			goto fail;
 		dp->devno = i;
 		dp->lvol = M_VOLNORM(v & 0x7f);

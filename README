@@ -1,6 +1,7 @@
 mixer
 =====
-A new sound mixer library implementation for the FreeBSD, and a complete
+
+An OSS mixer library implementation for the FreeBSD, and a complete
 rewrite of mixer(8) to use it and its new features. Some of its development 
 is part of Google Summer of Code 2021.
 
@@ -9,4 +10,4 @@ Usage
 	$ make
 	# make install clean
 
-Please report any bugs to <christos@FreeBSD.org>.
+Report any bugs to <christos@FreeBSD.org>.

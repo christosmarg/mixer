@@ -92,10 +92,10 @@ default_unit:
 
 	TAILQ_INIT(&m->devs);
 	for (i = 0; i < SOUND_MIXER_NRDEVICES; i++) {
-		if (!M_ISDEV(m, i) && !M_ISREC(m, i) && !M_ISRECSRC(m, i))
+		if (!M_ISDEV(m, i))
 			continue;
 		if (ioctl(m->fd, MIXER_READ(i), &v) < 0)
-			continue;
+			goto fail;
 		if ((dp = calloc(1, sizeof(struct mix_dev))) == NULL)
 			goto fail;
 		dp->devno = i;

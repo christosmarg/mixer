@@ -38,6 +38,7 @@
 static int _mixer_close(struct mixer *m);
 
 static const char *names[SOUND_MIXER_NRDEVICES] = SOUND_DEVICE_NAMES;
+static int ndev = 0;
 
 /*
  * Open a mixer device in `/dev/mixerN`, where N is the number of the mixer 
@@ -65,12 +66,12 @@ mixer_open(const char *name)
 		}
 		/* `name` is "/dev/mixer" so, we'll use the default unit. */
 		if (strncmp(name, BASEPATH, strlen(name)) == 0)
-			goto default_unit;
+			goto dunit;
 		m->unit = strtol(name + strlen(BASEPATH), NULL, 10);
 		(void)strlcpy(m->name, name, sizeof(m->name));
 	} else {
-default_unit:
-		if ((m->unit = mixer_get_default_unit()) < 0)
+dunit:
+		if ((m->unit = mixer_getdunit()) < 0)
 			goto fail;
 		(void)snprintf(m->name, sizeof(m->name) - 1, "/dev/mixer%d", m->unit);
 	}
@@ -79,7 +80,7 @@ default_unit:
 		goto fail;
 
 	m->devmask = m->recmask = m->recsrc = 0;
-	m->f_default = m->unit == mixer_get_default_unit();
+	m->f_default = m->unit == mixer_getdunit();
 	/* The unit number _must_ be set before the ioctl. */
 	m->mi.dev = m->unit;
 	m->ci.card = m->unit;
@@ -114,6 +115,7 @@ default_unit:
 		dp->f_src = M_ISRECSRC(m, i);
 		(void)strlcpy(dp->name, names[i], sizeof(dp->name));
 		TAILQ_INSERT_TAIL(&m->devs, dp, devs);
+		ndev++;
 	}
 	/* The default device is always "vol". */
 	m->dev = TAILQ_FIRST(&m->devs);
@@ -132,6 +134,24 @@ mixer_close(struct mixer *m)
 	return (_mixer_close(m));
 }
 
+struct mix_dev *
+mixer_getdev(struct mixer *m, int dev)
+{
+	struct mix_dev *dp;
+
+	if (dev < 0 || dev >= ndev) {
+		errno = ERANGE;
+		return (NULL);
+	}
+	TAILQ_FOREACH(dp, &m->devs, devs) {
+		if (dp->devno == dev)
+			return (dp);
+	}
+	errno = EINVAL;
+
+	return (NULL);
+}
+
 /*
  * Select a mixer device (e.g vol, pcm, mic) by name. The mixer structure
  * keeps a list of all the devices the mixer has, but only one can be
@@ -143,7 +163,7 @@ mixer_close(struct mixer *m)
  * @param: `name`: device name (e.g vol, pcm, ...)
  */
 struct mix_dev *
-mixer_seldevbyname(struct mixer *m, const char *name)
+mixer_getdevbyname(struct mixer *m, const char *name)
 {
 	struct mix_dev *dp;
 
@@ -168,7 +188,7 @@ mixer_seldevbyname(struct mixer *m, const char *name)
  * be handlded by the caller.
  */
 int
-mixer_chvol(struct mixer *m, float l, float r)
+mixer_setvol(struct mixer *m, float l, float r)
 {
 	int v;
 
@@ -192,7 +212,7 @@ mixer_chvol(struct mixer *m, float l, float r)
  *	`M_PANMIN <= pan <= M_PANMAX`.
  */
 int
-mixer_chpan(struct mixer *m, float pan)
+mixer_setpan(struct mixer *m, float pan)
 {
 	int l, r;
 
@@ -203,7 +223,7 @@ mixer_chpan(struct mixer *m, float pan)
 	l = m->dev->lvol;
 	r = m->dev->rvol;
 
-	return (mixer_chvol(m, l, r));
+	return (mixer_setvol(m, l, r));
 }
 
 /*
@@ -248,7 +268,7 @@ mixer_modrecsrc(struct mixer *m, int opt)
  * and set the mixer structure's `f_default` flag.
  */
 int
-mixer_get_default_unit(void)
+mixer_getdunit(void)
 {
 	int unit;
 	size_t size;
@@ -268,7 +288,7 @@ mixer_get_default_unit(void)
  * @param: `unit`: the audio card number (e.g pcm0, pcm1, ...).
  */
 int
-mixer_set_default_unit(struct mixer *m, int unit)
+mixer_setdunit(struct mixer *m, int unit)
 {
 	size_t size;
 
@@ -284,7 +304,7 @@ mixer_set_default_unit(struct mixer *m, int unit)
  * Get the total number of mixers in the system.
  */
 int
-mixer_get_nmixers(void)
+mixer_getnmixers(void)
 {
 	struct mixer *m;
 	oss_sysinfo si;

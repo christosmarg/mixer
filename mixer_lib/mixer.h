@@ -69,7 +69,7 @@ struct mix_dev {
 };
 
 struct mixer {
-	TAILQ_HEAD(head, mix_dev) devs;
+	TAILQ_HEAD(head, mix_dev) devs; /* XXX: use LIST? */
 	struct mix_dev *dev;
 	oss_mixerinfo mi;
 	oss_card_info ci;
@@ -84,15 +84,14 @@ struct mixer {
 
 struct mixer *mixer_open(const char *);
 int mixer_close(struct mixer *);
-struct mix_dev *mixer_seldevbyname(struct mixer *, const char *);
-/* XXX: change names for ch* functions? */
-int mixer_chvol(struct mixer *, float, float);
-int mixer_chpan(struct mixer *, float);
+struct mix_dev *mixer_getdev(struct mixer *, int);
+struct mix_dev *mixer_getdevbyname(struct mixer *, const char *);
+int mixer_setvol(struct mixer *, float, float);
+int mixer_setpan(struct mixer *, float);
 int mixer_modrecsrc(struct mixer *, int);
-int mixer_get_default_unit(void);
-int mixer_set_default_unit(struct mixer *, int);
-int mixer_get_nmixers(void);
-/* TODO: get mixer/card total number */
+int mixer_getdunit(void);
+int mixer_setdunit(struct mixer *, int);
+int mixer_getnmixers(void);
 
 __END_DECLS
 

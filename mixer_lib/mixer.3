@@ -20,17 +20,36 @@
 .\" THE SOFTWARE.
 .\"
 
-.Dd March 11, 2021
+.Dd June 28, 2021
 .Dt mixer 3
 .Os
 .Sh NAME
 .Nm mixer
-.Nd a mixer library
+.Nd an OSS mixer library
 .Sh LIBRARY
-Mixer (libmixer, -lmixer)
+Mixer library (libmixer, -lmixer)
 .Sh SYNOPSIS
 .In mixer.h
-.\" TODO
+.Ft struct mixer *
+.Fn mixer_open "const char *path"
+.Ft int
+.Fn mixer_close "struct mixer *m"
+.Ft struct mix_dev *
+.Fn mixer_getdev "struct mixer *m" "int devno"
+.Ft struct mix_dev *
+.Fn mixer_getdevbyname "struct mixer *m" "name"
+.Ft int
+.Fn mixer_setvol "struct mixer *m" "float lvol" "float rvol"
+.Ft int
+.Fn mixer_setpan "struct mixer *m" "float pan"
+.Ft int
+.Fn mixer_modrecsrc "struct mixer *m" "int opt"
+.Ft int
+.Fn mixer_getdunit "void"
+.Ft int
+.Fn mixer_setdunit "struct mixer *m" "int unit"
+.Ft int
+.Fn mixer_getnmixers "void"
 .Sh DESCRIPTION
 .\" TODO
 .Sh SEE ALSO

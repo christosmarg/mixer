@@ -33,6 +33,7 @@ static void usage(void) __dead2;
 static void printall(struct mixer *, int);
 static void printmixer(struct mixer *);
 static void printdev(struct mix_dev *, int);
+static void printrecsrc(struct mixer *, int);
 
 static void __dead2
 usage(void)
@@ -87,11 +88,33 @@ printdev(struct mix_dev *d, int oflag)
 	}
 }
 
+static void
+printrecsrc(struct mixer *m, int oflag)
+{
+	struct mix_dev *dp;
+	int n = 0;
+
+	if (!m->recmask)
+		return;
+	if (!oflag) {
+		printmixer(m);
+		printf("    recording source: ");
+	}
+	TAILQ_FOREACH(dp, &m->devs, devs) {
+		if (M_ISRECSRC(m, dp->devno)) {
+			if (n)
+				printf("%s ", oflag ? " " : ", ");
+			printf("%s", dp->name);
+			n++;
+		}
+	}
+	printf("\n");
+}
+
 int
 main(int argc, char *argv[])
 {
 	struct mixer *m;
-	struct mix_dev *dp;
 	char lstr[8], rstr[8], *name = NULL, buf[NAME_MAX];
 	float l, r, lrel, rrel;
 	int dusage = 0, opt = 0, dunit;
@@ -118,6 +141,7 @@ main(int argc, char *argv[])
 			break;
 		case 'r':
 			/* Reserved for {+|-|^|=}rec rdev. */
+			/* FIXME: problems with -rec */
 			break;
 		case 's':
 			sflag = 1;
@@ -131,15 +155,19 @@ main(int argc, char *argv[])
 	argv += optind;
 
 	if (aflag) {
-		if ((n = mixer_get_nmixers()) < 0)
+		if ((n = mixer_getnmixers()) < 0)
 			err(1, "mixer_get_nmixers");
 		for (i = 0; i < n; i++) {
 			(void)snprintf(buf, sizeof(buf), "/dev/mixer%d", i);
 			if ((m = mixer_open(buf)) == NULL)
 				err(1, "mixer_open: %s", buf);
-			printall(m, oflag);
-			if (oflag)
-				printf("\n");
+			if (sflag)
+				printrecsrc(m, oflag);
+			else {
+				printall(m, oflag);
+				if (oflag)
+					printf("\n");
+			}
 			(void)mixer_close(m);
 		}
 		return (0);
@@ -153,30 +181,17 @@ main(int argc, char *argv[])
 			/* We don't want to get in here again. */
 			dflag = 0;
 			/* XXX: should we die if any of these two fails? */
-			if ((n = mixer_get_default_unit()) < 0) {
+			if ((n = mixer_getdunit()) < 0) {
 				warn("cannot get default unit");
 				continue;
 			}
-			if (mixer_set_default_unit(m, dunit) < 0) {
+			if (mixer_setdunit(m, dunit) < 0) {
 				warn("cannot set default unit to %d", dunit);
 				continue;
 			}
 			printf("default_unit: %d -> %d\n", n, dunit);
 		} else if (sflag) {
-			if (!m->recmask)
-				goto done;
-			n = 0;
-			printmixer(m);
-			printf("    recording source: ");
-			TAILQ_FOREACH(dp, &m->devs, devs) {
-				if (M_ISRECSRC(m, dp->devno)) {
-					if (n)
-						printf(", ");
-					printf("%s", dp->name);
-					n++;
-				}
-			}
-			printf("\n");
+			printrecsrc(m, oflag);
 			goto done;
 		} else if (argc > 0 && strcmp("rec", *argv + 1) == 0) {
 			if (**argv != '+' && **argv != '-' &&
@@ -199,7 +214,7 @@ main(int argc, char *argv[])
 				opt = M_TOGGLERECDEV;
 				break;
 			}
-			if ((m->dev = mixer_seldevbyname(m, argv[1])) == NULL) {
+			if ((m->dev = mixer_getdevbyname(m, argv[1])) == NULL) {
 				warn("unknown recording device: %s", argv[1]);
 				/* XXX */
 				rc = 1;
@@ -215,13 +230,9 @@ main(int argc, char *argv[])
 			argc -= 2;
 			argv += 2;
 		} else if (argc > 0) {
-			/* 
-			 * FIXME: this is causing problems if we have 
-			 * -options at the end 
-			 */
 			if ((k = sscanf(*argv, "%f:%f", &l, &r)) > 0)
 				;	/* nothing */
-			else if ((m->dev = mixer_seldevbyname(m, *argv)) == NULL) {
+			else if ((m->dev = mixer_getdevbyname(m, *argv)) == NULL) {
 				warn("unknown device: %s", *argv);
 				rc = 1;
 				goto done;
@@ -272,7 +283,7 @@ main(int argc, char *argv[])
 				printf("%s.volume: %.2f:%.2f -> %.2f:%.2f\n",
 				   m->dev->name, m->dev->lvol, m->dev->rvol, l, r);
 
-				if (mixer_chvol(m, l, r) < 0) {
+				if (mixer_setvol(m, l, r) < 0) {
 					warnx("cannot change volume");
 					rc = 1;
 				}

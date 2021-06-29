@@ -29,22 +29,28 @@
 
 #include <mixer.h>
 
-static void usage(void) __dead2;
+#define CTRL_VOL 0
+#define CTRL_REC 1
+
+#define LEN(x) (sizeof(x) / sizeof(x[0]))
+
+struct ctrl {
+	char name[NAME_MAX];
+	void (*mod)(struct mixer *, const char *, const char *);
+};
+
 static void printall(struct mixer *, int);
 static void printmixer(struct mixer *);
 static void printdev(struct mix_dev *, int);
 static void printrecsrc(struct mixer *, int);
+static void modvol(struct mixer *, const char *, const char *);
+static void modrecsrc(struct mixer *, const char *, const char *);
+static void usage(void) __dead2;
 
-static void __dead2
-usage(void)
-{
-	printf("usage: %1$s [-f device] [-d unit] [-o] [dev [+|-][lvol[:[+|-]rvol]] ...\n"
-	    "       %1$s [-f device] [-d unit] [-o] -s ...\n"
-	    "       %1$s [-f device] [-d unit] [-o] {^|+|-|=}rec rdev ...\n"
-	    "       %1$s [-o] -a\n",
-	    getprogname());
-	exit(1);
-}
+struct ctrl ctrls[] = {
+	[CTRL_VOL] = { "volume", modvol },
+	[CTRL_REC] = { "rec", modrecsrc },
+};
 
 static void
 printall(struct mixer *m, int oflag)
@@ -81,10 +87,10 @@ printdev(struct mix_dev *d, int oflag)
 			printf(" src");
 		printf("\n");
 	} else {
-		/* FIXME: get rid of the space */
-		printf("%s %.2f:%.2f ", d->name, d->lvol, d->rvol);
+		printf("%s.%s=%.2f:%.2f\n", 
+		    d->name, ctrls[CTRL_VOL].name, d->lvol, d->rvol);
 		if (d->f_src)
-			printf("+rec %s ", d->name);
+			printf("%s.%s=+\n", d->name, ctrls[CTRL_REC].name);
 	}
 }
 
@@ -98,31 +104,131 @@ printrecsrc(struct mixer *m, int oflag)
 		return;
 	if (!oflag) {
 		printmixer(m);
-		printf("    recording source: ");
+		printf("    recording source(s): ");
 	}
 	TAILQ_FOREACH(dp, &m->devs, devs) {
 		if (M_ISRECSRC(m, dp->devno)) {
-			if (n)
+			if (n++)
 				printf("%s ", oflag ? " " : ", ");
 			printf("%s", dp->name);
-			n++;
 		}
 	}
 	printf("\n");
+}
+
+static void
+modvol(struct mixer *m, const char *dev, const char *val)
+{
+	char lstr[8], rstr[8];
+	float l, r, lprev, rprev, lrel, rrel;
+	int n;
+
+	n = sscanf(val, "%7[^:]:%7s", lstr, rstr);
+	if (n == EOF) {
+		warnx("invalid value: %s", val);
+		return;
+	}
+	lrel = rrel = 0;
+	if (n > 0) {
+		if (*lstr == '+' || *lstr == '-')
+			lrel = rrel = 1;
+		l = strtof(lstr, NULL);
+	}
+	if (n > 1) {
+		if (*rstr == '+' || *rstr == '-')
+			rrel = 1;
+		r = strtof(rstr, NULL);
+	}
+	switch (n) {
+	case 1:
+		r = l; /* FALLTHROUGH */
+	case 2:
+		if (lrel)
+			l += m->dev->lvol;
+		if (rrel)
+			r += m->dev->rvol;
+
+		if (l < M_VOLMIN)
+			l = M_VOLMIN;
+		else if (l > M_VOLMAX)
+			l = M_VOLMAX;
+		if (r < M_VOLMIN)
+			r = M_VOLMIN;
+		else if (r > M_VOLMAX)
+			r = M_VOLMAX;
+
+		if ((m->dev = mixer_getdevbyname(m, dev)) == NULL) {
+			warn("cannot open device: %s\n", dev);
+			return;
+		}
+		lprev = m->dev->lvol;
+		rprev = m->dev->rvol;
+		if (mixer_setvol(m, l, r) < 0) {
+			warnx("cannot change volume");
+			return;
+		}
+		printf("%s.%s: %.2f:%.2f -> %.2f:%.2f\n",
+		   m->dev->name, ctrls[CTRL_VOL].name, lprev, rprev, l, r);
+	}
+}
+
+static void
+modrecsrc(struct mixer *m, const char *dev, const char *val)
+{
+	int n, opt = 0;
+
+	if (*val != '+' && *val != '-' &&
+	    *val != '=' && *val != '^') {
+		warnx("unknown modifier: %c", *val);
+		return;
+	}
+	switch (*val) {
+	case '+':
+		opt = M_ADDRECDEV;
+		break;
+	case '-':
+		opt = M_REMOVERECDEV;
+		break;
+	case '=':
+		opt = M_SETRECDEV;
+		break;
+	case '^':
+		opt = M_TOGGLERECDEV;
+		break;
+	}
+	if ((m->dev = mixer_getdevbyname(m, dev)) == NULL) {
+		warn("unknown recording device: %s", dev);
+		return;
+	}
+	/* Keep the previous state. */
+	n = m->dev->f_src != 0;
+	if (mixer_modrecsrc(m, opt) < 0)
+		warn("cannot modify device: %c%s", *val, dev);
+	else
+		printf("%s.%s: %d -> %d\n", 
+		    dev, ctrls[CTRL_REC].name, n, m->dev->f_src != 0);
+}
+
+static void __dead2
+usage(void)
+{
+	printf("usage: %1$s [-f device] [-d unit] [-os] [command ...]\n"
+	    "       %1$s [-d unit] [-os] -a\n",
+	    getprogname());
+	exit(1);
 }
 
 int
 main(int argc, char *argv[])
 {
 	struct mixer *m;
-	char lstr[8], rstr[8], *name = NULL, buf[NAME_MAX];
-	float l, r, lrel, rrel;
-	int dusage = 0, opt = 0, dunit;
+	char *name = NULL, buf[NAME_MAX];
+	char *p, *bufp, *devstr, *ctrlstr, *valstr = NULL;
+	int dunit, i, n;
 	int aflag = 0, dflag = 0, oflag = 0, sflag = 0;
-	int i, rc = 0;
-	char ch, n, k;
+	char ch;
 
-	while ((ch = getopt(argc, argv, "ad:f:or:s")) != -1) {
+	while ((ch = getopt(argc, argv, "ad:f:os")) != -1) {
 		switch (ch) {
 		case 'a':
 			aflag = 1;
@@ -138,10 +244,6 @@ main(int argc, char *argv[])
 			break;
 		case 'o':
 			oflag = 1;
-			break;
-		case 'r':
-			/* Reserved for {+|-|^|=}rec rdev. */
-			/* FIXME: problems with -rec */
 			break;
 		case 's':
 			sflag = 1;
@@ -176,11 +278,9 @@ main(int argc, char *argv[])
 	if ((m = mixer_open(name)) == NULL)
 		err(1, "mixer_open: %s", name);
 
-	while (!dusage) {
+	for (;;) {
 		if (dflag) {
-			/* We don't want to get in here again. */
 			dflag = 0;
-			/* XXX: should we die if any of these two fails? */
 			if ((n = mixer_getdunit()) < 0) {
 				warn("cannot get default unit");
 				continue;
@@ -193,114 +293,52 @@ main(int argc, char *argv[])
 		} else if (sflag) {
 			printrecsrc(m, oflag);
 			goto done;
-		} else if (argc > 0 && strcmp("rec", *argv + 1) == 0) {
-			if (**argv != '+' && **argv != '-' &&
-			    **argv != '=' && **argv != '^') {
-				warnx("unknown modifier: %c", **argv);
-				dusage = 1;
-				break;
-			}
-			switch (**argv) {
-			case '+':
-				opt = M_ADDRECDEV;
-				break;
-			case '-':
-				opt = M_REMOVERECDEV;
-				break;
-			case '=':
-				opt = M_SETRECDEV;
-				break;
-			case '^':
-				opt = M_TOGGLERECDEV;
-				break;
-			}
-			if ((m->dev = mixer_getdevbyname(m, argv[1])) == NULL) {
-				warn("unknown recording device: %s", argv[1]);
-				/* XXX */
-				rc = 1;
-				goto done;
-			}
-			/* Keep the previous state. */
-			n = m->dev->f_src != 0;
-			if (mixer_modrecsrc(m, opt) < 0)
-				warn("cannot modify device: %c%s", **argv, argv[1]);
-			else
-				printf("%s.recsrc: %d -> %d\n", argv[1],
-				    n, m->dev->f_src != 0);
-			argc -= 2;
-			argv += 2;
 		} else if (argc > 0) {
-			if ((k = sscanf(*argv, "%f:%f", &l, &r)) > 0)
-				;	/* nothing */
-			else if ((m->dev = mixer_getdevbyname(m, *argv)) == NULL) {
-				warn("unknown device: %s", *argv);
-				rc = 1;
-				goto done;
+			if ((p = bufp = strdup(*argv)) == NULL)
+				err(1, "strdup(%s)", *argv);
+			/* Split the string into name, control and value. */
+			devstr = strsep(&p, ".");
+			/*
+			 * The input was only the device name, so we'll just
+			 * print all its information.
+			 */
+			if (p == NULL) {
+				/* TODO */
 			}
-
-			lrel = rrel = 0;
-			if (argc > 1) {
-				n = sscanf(argv[1], "%7[^:]:%7s", lstr, rstr);
-				if (n == EOF) {
-					warnx("invalid value: %s", argv[1]);
-					dusage = 1;
+			ctrlstr = strsep(&p, "=");
+			/*
+			 * If we don't have an assignment, print the control's
+			 * values.
+			 */
+			if (p == NULL) {
+				/* TODO */
+			}
+			valstr = p;
+			if (ctrlstr == NULL || valstr == NULL) {
+				/* FIXME: doesn't print everything */
+				warnx("invalid syntax: %s", bufp);
+				goto next;
+			}
+			for (i = 0; i < LEN(ctrls); i++) {
+				if (strncmp(ctrlstr, ctrls[i].name, 
+				    strlen(ctrls[i].name)) == 0) {
+					ctrls[i].mod(m, devstr, valstr);
 					break;
 				}
-				if (n > 0) {
-					if (*lstr == '+' || *lstr == '-')
-						lrel = rrel = 1;
-					l = strtof(lstr, NULL);
-				}
-				if (n > 1) {
-					if (*rstr == '+' || *rstr == '-')
-						rrel = 1;
-					r = strtof(rstr, NULL);
-				}
 			}
-			switch (argc > 1 ? n : k) {
-			case 0:
-				if (!oflag)
-					printmixer(m);
-				printdev(m->dev, oflag);
-				goto done;
-			case 1:
-				r = l; /* FALLTHROUGH */
-			case 2:
-				if (lrel)
-					l += m->dev->lvol;
-				if (rrel)
-					r += m->dev->rvol;
-
-				if (l < M_VOLMIN)
-					l = M_VOLMIN;
-				else if (l > M_VOLMAX)
-					l = M_VOLMAX;
-				if (r < M_VOLMIN)
-					r = M_VOLMIN;
-				else if (r > M_VOLMAX)
-					r = M_VOLMAX;
-
-				printf("%s.volume: %.2f:%.2f -> %.2f:%.2f\n",
-				   m->dev->name, m->dev->lvol, m->dev->rvol, l, r);
-
-				if (mixer_setvol(m, l, r) < 0) {
-					warnx("cannot change volume");
-					rc = 1;
-				}
-				argc -= 2;
-				argv += 2;
-			}
+			if (i == LEN(ctrls))
+				warnx("invalid control: %s", ctrlstr);
+next:
+			free(p);
+			argc--;
+			argv++;
 		} else
 			break;
 	}
 
-	if (dusage) {
-		(void)mixer_close(m);
-		usage();
-	} else
-		printall(m, oflag);
+	printall(m, oflag);
 done:
 	(void)mixer_close(m);
 
-	return (rc);
+	return (0);
 }

@@ -69,7 +69,7 @@ struct mix_dev {
 };
 
 struct mixer {
-	TAILQ_HEAD(head, mix_dev) devs; /* XXX: use LIST? */
+	TAILQ_HEAD(head, mix_dev) devs;
 	struct mix_dev *dev;
 	oss_mixerinfo mi;
 	oss_card_info ci;

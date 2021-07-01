@@ -98,7 +98,7 @@ with one of the available devices):
 .Bl -column xxxxxxxxxxxxxxxxxxxxxxxx -offset indent
 .It Sy "Name	Value"
 .It "dev.volume	[[+|-]lvol[:[+|-]rvol]]"
-.It "dev.rec	{+|-|^|=}"
+.It "dev.recsrc	{+|-|^|=}"
 .El
 .Pp
 To modify a device's volume, the optional
@@ -116,8 +116,10 @@ current settings by the amount specified.
 .Nm
 marks devices which can be used as a recording source with
 .Ar rec .
+Recording sources are marked with
+.Ar src .
 To modify the recording source you can use one of:
-.Bl -tag -width =rec -offset indent
+.Bl -tag -width = -offset indent
 .It Cm ^
 toggles
 .Ar dev
@@ -184,7 +186,7 @@ and toggle
 .Ar line
 recording sources:
 .Bl -tag -width Ds -offset indent
-.It $ mixer mic.rec=+ line.rec=^
+.It $ mixer mic.recsrc=+ line.recsrc=^
 .El
 .Pp
 Dump

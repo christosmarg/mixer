@@ -33,6 +33,7 @@
 
 #define CTRL_VOL 0
 #define CTRL_SRC 1
+#define CTRL_MUT 2
 
 struct ctrl {
 	char name[NAME_MAX];
@@ -55,6 +56,7 @@ static void	usage(void) __dead2;
 static const struct ctrl ctrls[] = {
 	[CTRL_VOL] = { "volume", modvol, printvol },
 	[CTRL_SRC] = { "recsrc", modrecsrc, printrec },
+	/*[CTRL_MUT] = { "mute", modmute, printmute },*/
 };
 
 static void
@@ -91,6 +93,8 @@ printdev(struct mix_dev *d, int oflag)
 		       printf(" rec");
 		if (d->f_src)
 			printf(" src");
+		if (d->f_mut)
+			printf(" mute");
 		printf("\n");
 	} else {
 		printf("%s.%s=%.2f:%.2f\n", 

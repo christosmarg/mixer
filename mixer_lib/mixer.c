@@ -87,6 +87,7 @@ dunit:
 	if (ioctl(m->fd, SNDCTL_MIXERINFO, &m->mi) < 0 || 
 	    ioctl(m->fd, SNDCTL_CARDINFO, &m->ci) < 0 || 
 	    ioctl(m->fd, SOUND_MIXER_READ_DEVMASK, &m->devmask) < 0 ||
+	    ioctl(m->fd, SOUND_MIXER_READ_MUTE, &m->mutemask) < 0 ||
 	    ioctl(m->fd, SOUND_MIXER_READ_RECMASK, &m->recmask) < 0 ||
 	    ioctl(m->fd, SOUND_MIXER_READ_RECSRC, &m->recsrc) < 0)
 		goto fail;
@@ -100,23 +101,21 @@ dunit:
 		if ((dp = calloc(1, sizeof(struct mix_dev))) == NULL)
 			goto fail;
 		dp->devno = i;
+
+		/* XXX: Make this a seperate function? */
 		dp->lvol = M_VOLNORM(v & 0x7f);
 		dp->rvol = M_VOLNORM((v >> 8) & 0x7f);
 		dp->pan = dp->rvol - dp->lvol;
-		/* 
-		 * TODO: find a way to know if it's already muted 
-		 * or not, this doesn't make sense 
-		 */
-		dp->lmute = 0;
-		dp->rmute = 0;
-		/* XXX: is this correct? */
-		dp->f_pbk = !M_ISREC(m, i);
-		dp->f_rec = M_ISREC(m, i);
-		dp->f_src = M_ISRECSRC(m, i);
+
+		dp->f_mut = M_ISMUTE(m, i) ? 1 : 0;
+		dp->f_pbk = !M_ISREC(m, i) ? 1 : 0;
+		dp->f_rec = M_ISREC(m, i) ? 1 : 0;
+		dp->f_src = M_ISRECSRC(m, i) ? 1 : 0;
 		(void)strlcpy(dp->name, names[i], sizeof(dp->name));
 		TAILQ_INSERT_TAIL(&m->devs, dp, devs);
 		ndev++;
 	}
+
 	/* The default device is always "vol". */
 	m->dev = TAILQ_FIRST(&m->devs);
 
@@ -224,6 +223,37 @@ mixer_setpan(struct mixer *m, float pan)
 	r = m->dev->rvol;
 
 	return (mixer_setvol(m, l, r));
+}
+
+int
+mixer_setmute(struct mixer *m, int opt)
+{
+	int v;
+
+	switch (opt) {
+	case M_MUTE:
+		m->mutemask |= (1 << m->dev->devno);
+		break;
+	case M_UNMUTE:
+		m->mutemask &= ~(1 << m->dev->devno);
+		break;
+	default:
+		errno = EINVAL;
+		return (-1);
+	}
+	if (ioctl(m->fd, SOUND_MIXER_WRITE_MUTE, &m->mutemask) < 0)
+		return (-1);
+	if (ioctl(m->fd, SOUND_MIXER_READ_MUTE, &m->mutemask) < 0)
+		return (-1);
+	/* Update the volume. */
+	if (ioctl(m->fd, MIXER_READ(m->dev->devno), &v) < 0)
+		return (-1);
+	m->dev->lvol = M_VOLNORM(v & 0x7f);
+	m->dev->rvol = M_VOLNORM((v >> 8) & 0x7f);
+	m->dev->pan = m->dev->rvol - m->dev->lvol;
+	m->dev->f_mut = M_ISMUTE(m, m->dev->devno);
+
+	return 0;
 }
 
 /*

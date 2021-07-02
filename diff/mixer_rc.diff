@@ -1,0 +1,8 @@
+61c61
+< 		/usr/sbin/mixer_prog -f ${dev} -o > /var/db/${1}-state 2>/dev/null
+---
+> 		/usr/sbin/mixer -f ${dev} -s > /var/db/${1}-state 2>/dev/null
+75c75
+< 		/usr/sbin/mixer_prog -f ${dev} `cat ${file}` > /dev/null
+---
+> 		/usr/sbin/mixer -f ${dev} `cat ${file}` > /dev/null

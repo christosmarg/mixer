@@ -39,6 +39,9 @@ __FBSDID("$FreeBSD$");
 #define M_SETRECDEV		0x04
 #define M_TOGGLERECDEV		0x08
 
+#define M_MUTE			0x01
+#define M_UNMUTE		0x02
+
 #define M_VOLMIN		0.0f
 #define M_VOLMAX		1.0f
 #define M_VOLNORM(v)		((v) / 100.0f)
@@ -49,6 +52,7 @@ __FBSDID("$FreeBSD$");
 
 #define M_ISSET(n, f)		((1 << (n)) & (f))
 #define M_ISDEV(m, n)		M_ISSET(n, (m)->devmask)
+#define M_ISMUTE(m, n)		M_ISSET(n, (m)->mutemask)
 #define M_ISREC(m, n)		M_ISSET(n, (m)->recmask)
 #define M_ISRECSRC(m, n)	M_ISSET(n, (m)->recsrc)
 
@@ -58,10 +62,9 @@ struct mix_dev {
 	float lvol;
 	float rvol;
 	float pan;
-	int lmute;
-	int rmute;
 	//int rate;
 	//int samples;
+	int f_mut;
 	int f_pbk;
 	int f_rec;
 	int f_src;
@@ -77,10 +80,13 @@ struct mixer {
 	int fd;
 	int unit;
 	int devmask;
+	int mutemask;
 	int recmask;
 	int recsrc;
 	int f_default;
 };
+
+/* XXX: move control handling here? */
 
 struct mixer *mixer_open(const char *);
 int mixer_close(struct mixer *);
@@ -88,6 +94,7 @@ struct mix_dev *mixer_getdev(struct mixer *, int);
 struct mix_dev *mixer_getdevbyname(struct mixer *, const char *);
 int mixer_setvol(struct mixer *, float, float);
 int mixer_setpan(struct mixer *, float);
+int mixer_setmute(struct mixer *, int);
 int mixer_modrecsrc(struct mixer *, int);
 int mixer_getdunit(void);
 int mixer_setdunit(struct mixer *, int);

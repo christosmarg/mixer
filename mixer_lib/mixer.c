@@ -237,6 +237,9 @@ mixer_setmute(struct mixer *m, int opt)
 	case M_UNMUTE:
 		m->mutemask &= ~(1 << m->dev->devno);
 		break;
+	case M_TOGGLEMUTE:
+		m->mutemask ^= (1 << m->dev->devno);
+		break;
 	default:
 		errno = EINVAL;
 		return (-1);

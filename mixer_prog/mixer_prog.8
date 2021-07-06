@@ -98,10 +98,13 @@ with one of the available devices):
 .Bl -column xxxxxxxxxxxxxxxxxxxxxxxx -offset indent
 .It Sy "Name	Value"
 .It "dev.volume	[[+|-]lvol[:[+|-]rvol]]"
+.It "dev.mute	{0|1|^}"
 .It "dev.recsrc	{+|-|^|=}"
 .El
 .Pp
-To modify a device's volume, the optional
+The
+.Ar dev.volume
+control modifies a device's volume. The optional
 .Ar lvol 
 and/or
 .Ar rvol
@@ -113,12 +116,33 @@ or
 the value following will be used as a relative adjustment, modifying the
 current settings by the amount specified.
 .Pp
+The
+.Ar dev.mute
+control (un)mutes a device. The following values are available:
+.Bl -tag -width = -offset indent
+.It Cm 0
+unmutes
+.Ar dev .
+.It Cm 1
+mutes
+.Ar dev .
+.It Cm ^
+toggles the mute of
+.Ar dev .
+.El
+.Pp
+The
+.Ar dev.recsrc
+control modifies the recording sources of a mixer.
 .Nm
 marks devices which can be used as a recording source with
 .Ar rec .
 Recording sources are marked with
 .Ar src .
-To modify the recording source you can use one of:
+To modify the recording source you can use one of the following modifiers
+on a
+.Ar rec
+device:
 .Bl -tag -width = -offset indent
 .It Cm ^
 toggles

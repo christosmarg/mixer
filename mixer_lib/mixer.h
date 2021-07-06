@@ -41,6 +41,7 @@ __FBSDID("$FreeBSD$");
 
 #define M_MUTE			0x01
 #define M_UNMUTE		0x02
+#define M_TOGGLEMUTE		0x04
 
 #define M_VOLMIN		0.0f
 #define M_VOLMAX		1.0f

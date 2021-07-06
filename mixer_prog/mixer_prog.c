@@ -32,8 +32,8 @@
 #define LEN(x) (sizeof(x) / sizeof(x[0]))
 
 #define CTRL_VOL 0
-#define CTRL_SRC 1
-#define CTRL_MUT 2
+#define CTRL_MUT 1
+#define CTRL_SRC 2
 
 struct ctrl {
 	char name[NAME_MAX];
@@ -43,20 +43,22 @@ struct ctrl {
 };
 
 static void	printall(struct mixer *, int);
-static void	printmixer(struct mixer *, int);
+static void	printminfo(struct mixer *, int);
 static void	printdev(struct mix_dev *, int);
 static void	printrecsrc(struct mixer *, int);
 static int	findctrl(const char *);
-static void	modvol(struct mixer *, const char *);
-static void	modrecsrc(struct mixer *, const char *);
-static void	printvol(struct mixer *);
-static void	printrec(struct mixer *);
+static void	mod_volume(struct mixer *, const char *);
+static void	mod_mute(struct mixer *, const char *);
+static void	mod_recsrc(struct mixer *, const char *);
+static void	print_volume(struct mixer *);
+static void	print_mute(struct mixer *);
+static void	print_recsrc(struct mixer *);
 static void	usage(void) __dead2;
 
 static const struct ctrl ctrls[] = {
-	[CTRL_VOL] = { "volume", modvol, printvol },
-	[CTRL_SRC] = { "recsrc", modrecsrc, printrec },
-	/*[CTRL_MUT] = { "mute", modmute, printmute },*/
+	[CTRL_VOL] = { "volume",	mod_volume,	print_volume },
+	[CTRL_MUT] = { "mute",		mod_mute,	print_mute },
+	[CTRL_SRC] = { "recsrc",	mod_recsrc,	print_recsrc },
 };
 
 static void
@@ -64,14 +66,14 @@ printall(struct mixer *m, int oflag)
 {
 	struct mix_dev *dp;
 
-	printmixer(m, oflag);
+	printminfo(m, oflag);
 	TAILQ_FOREACH(dp, &m->devs, devs) {
 		printdev(dp, oflag);
 	}
 }
 
 static void
-printmixer(struct mixer *m, int oflag)
+printminfo(struct mixer *m, int oflag)
 {
 	if (oflag)
 		return;
@@ -101,6 +103,7 @@ printdev(struct mix_dev *d, int oflag)
 		    d->name, ctrls[CTRL_VOL].name, d->lvol, d->rvol);
 		if (d->f_src)
 			printf("%s.%s=+\n", d->name, ctrls[CTRL_SRC].name);
+		/* TODO: add f_mut */
 	}
 }
 
@@ -112,7 +115,7 @@ printrecsrc(struct mixer *m, int oflag)
 
 	if (!m->recmask)
 		return;
-	printmixer(m, oflag);
+	printminfo(m, oflag);
 	if (!oflag)
 		printf("    recording source(s): ");
 	TAILQ_FOREACH(dp, &m->devs, devs) {
@@ -138,7 +141,7 @@ findctrl(const char *ctrl)
 }
 
 static void
-modvol(struct mixer *m, const char *val)
+mod_volume(struct mixer *m, const char *val)
 {
 	char lstr[8], rstr[8];
 	float l, r, lprev, rprev, lrel, rrel;
@@ -191,14 +194,37 @@ modvol(struct mixer *m, const char *val)
 }
 
 static void
-modrecsrc(struct mixer *m, const char *val)
+mod_mute(struct mixer *m, const char *val)
 {
-	int n, opt = 0;
+	int n, opt = -1;
 
-	if (*val != '+' && *val != '-' && *val != '=' && *val != '^') {
+	switch (*val) {
+	case '0':
+		opt = M_UNMUTE;
+		break;
+	case '1':
+		opt = M_MUTE;
+		break;
+	case '^':
+		opt = M_TOGGLEMUTE;
+		break;
+	default:
 		warnx("%c: no such modifier", *val);
 		return;
 	}
+	n = m->dev->f_mut;
+	if (mixer_setmute(m, opt) < 0)
+		warn("%s.%s=%c", m->dev->name, ctrls[CTRL_MUT].name, *val);
+	else
+		printf("%s.%s: %d -> %d\n",
+		    m->dev->name, ctrls[CTRL_MUT].name, n, m->dev->f_mut);
+}
+
+static void
+mod_recsrc(struct mixer *m, const char *val)
+{
+	int n, opt = -1;
+
 	switch (*val) {
 	case '+':
 		opt = M_ADDRECDEV;
@@ -212,28 +238,36 @@ modrecsrc(struct mixer *m, const char *val)
 	case '^':
 		opt = M_TOGGLERECDEV;
 		break;
+	default:
+		warnx("%c: no such modifier", *val);
+		return;
 	}
-	/* Keep the previous state. */
-	n = m->dev->f_src != 0;
+	n = m->dev->f_src;
 	if (mixer_modrecsrc(m, opt) < 0)
 		warn("%s.%s=%c", m->dev->name, ctrls[CTRL_SRC].name, *val);
 	else
 		printf("%s.%s: %d -> %d\n", 
-		    m->dev->name, ctrls[CTRL_SRC].name, n, m->dev->f_src != 0);
+		    m->dev->name, ctrls[CTRL_SRC].name, n, m->dev->f_src);
 }
 
 static void
-printvol(struct mixer *m)
+print_volume(struct mixer *m)
 {
 	printf("%s.%s=%.2f:%.2f\n", 
 	    m->dev->name, ctrls[CTRL_VOL].name, m->dev->lvol, m->dev->rvol);
 }
 
 static void
-printrec(struct mixer *m)
+print_mute(struct mixer *m)
+{
+	printf("%s.%s=%d\n", m->dev->name, ctrls[CTRL_MUT].name, m->dev->f_mut);
+}
+
+static void
+print_recsrc(struct mixer *m)
 {
 	printf("%s.%s=%d\n",
-	    m->dev->name, ctrls[CTRL_SRC].name, m->dev->f_rec != 0);
+	    m->dev->name, ctrls[CTRL_SRC].name, m->dev->f_rec);
 }
 
 static void __dead2
@@ -320,7 +354,8 @@ main(int argc, char *argv[])
 	}
 	if (sflag) {
 		printrecsrc(m, oflag);
-		goto done;
+		(void)mixer_close(m);
+		return (0);
 	}
 
 parse:
@@ -361,7 +396,6 @@ next:
 
 	if (pall)
 		printall(m, oflag);
-done:
 	(void)mixer_close(m);
 
 	return (0);

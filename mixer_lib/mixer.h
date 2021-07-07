@@ -57,18 +57,22 @@ __FBSDID("$FreeBSD$");
 #define M_ISREC(m, n)		M_ISSET(n, (m)->recmask)
 #define M_ISRECSRC(m, n)	M_ISSET(n, (m)->recsrc)
 
+//struct mix_vol {
+	//float l;
+	//float r;
+	//float pan;
+//};
+
 struct mix_dev {
 	char name[NAME_MAX];
 	int devno;
-	float lvol;
-	float rvol;
-	float pan;
-	//int rate;
-	//int samples;
 	int f_mut;
 	int f_pbk;
 	int f_rec;
 	int f_src;
+	float lvol;
+	float rvol;
+	float pan;
 	TAILQ_ENTRY(mix_dev) devs;
 };
 

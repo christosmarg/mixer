@@ -34,11 +34,27 @@
 #include "mixer.h"
 
 #define BASEPATH "/dev/mixer"
+#define MIN(x, y) ((x) < (y) ? (x) : (y))
 
-static int _mixer_close(struct mixer *m);
+static int _mixer_readvol(struct mixer *, struct mix_dev *);
 
 static const char *names[SOUND_MIXER_NRDEVICES] = SOUND_DEVICE_NAMES;
 static int ndev = 0;
+
+static int
+_mixer_readvol(struct mixer *m, struct mix_dev *dev)
+{
+	int v;
+
+	if (ioctl(m->fd, MIXER_READ(dev->devno), &v) < 0)
+		return (-1);
+	dev->lvol = M_VOLNORM(v & 0x00ff);
+	dev->rvol = M_VOLNORM((v >> 8) & 0x00ff);
+	dev->pan = dev->rvol - dev->lvol;
+	dev->f_mut = M_ISMUTE(m, dev->devno);
+
+	return (0);
+}
 
 /*
  * Open a mixer device in `/dev/mixerN`, where N is the number of the mixer 
@@ -53,7 +69,7 @@ mixer_open(const char *name)
 {
 	struct mixer *m = NULL;
 	struct mix_dev *dp;
-	int i, v;
+	int i;
 
 	if ((m = calloc(1, sizeof(struct mixer))) == NULL)
 		goto fail;
@@ -96,18 +112,11 @@ dunit:
 	for (i = 0; i < SOUND_MIXER_NRDEVICES; i++) {
 		if (!M_ISDEV(m, i))
 			continue;
-		if (ioctl(m->fd, MIXER_READ(i), &v) < 0)
-			goto fail;
 		if ((dp = calloc(1, sizeof(struct mix_dev))) == NULL)
 			goto fail;
 		dp->devno = i;
-
-		/* XXX: Make this a seperate function? */
-		dp->lvol = M_VOLNORM(v & 0x7f);
-		dp->rvol = M_VOLNORM((v >> 8) & 0x7f);
-		dp->pan = dp->rvol - dp->lvol;
-
-		dp->f_mut = M_ISMUTE(m, i) ? 1 : 0;
+		if (_mixer_readvol(m, dp) < 0)
+			goto fail;
 		dp->f_pbk = !M_ISREC(m, i) ? 1 : 0;
 		dp->f_rec = M_ISREC(m, i) ? 1 : 0;
 		dp->f_src = M_ISRECSRC(m, i) ? 1 : 0;
@@ -127,10 +136,24 @@ fail:
 	return (NULL);
 }
 
+/*
+ * Free resources and close the mixer.
+ */
 int
 mixer_close(struct mixer *m)
 {
-	return (_mixer_close(m));
+	struct mix_dev *dp;
+	int r;
+
+	r = close(m->fd);
+	while (!TAILQ_EMPTY(&m->devs)) {
+		dp = TAILQ_FIRST(&m->devs);
+		TAILQ_REMOVE(&m->devs, dp, devs);
+		free(dp);
+	}
+	free(m);
+
+	return (r);
 }
 
 struct mix_dev *
@@ -195,10 +218,10 @@ mixer_setvol(struct mixer *m, float l, float r)
 		errno = ERANGE;
 		return (-1);
 	}
-	m->dev->lvol = l;
-	m->dev->rvol = r;
 	v = M_VOLDENORM(l) | M_VOLDENORM(r) << 8;
 	if (ioctl(m->fd, MIXER_WRITE(m->dev->devno), &v) < 0)
+		return (-1);
+	if (_mixer_readvol(m, m->dev) < 0)
 		return (-1);
 
 	return (0);
@@ -228,8 +251,6 @@ mixer_setpan(struct mixer *m, float pan)
 int
 mixer_setmute(struct mixer *m, int opt)
 {
-	int v;
-
 	switch (opt) {
 	case M_MUTE:
 		m->mutemask |= (1 << m->dev->devno);
@@ -248,13 +269,8 @@ mixer_setmute(struct mixer *m, int opt)
 		return (-1);
 	if (ioctl(m->fd, SOUND_MIXER_READ_MUTE, &m->mutemask) < 0)
 		return (-1);
-	/* Update the volume. */
-	if (ioctl(m->fd, MIXER_READ(m->dev->devno), &v) < 0)
+	if (_mixer_readvol(m, m->dev) < 0)
 		return (-1);
-	m->dev->lvol = M_VOLNORM(v & 0x7f);
-	m->dev->rvol = M_VOLNORM((v >> 8) & 0x7f);
-	m->dev->pan = m->dev->rvol - m->dev->lvol;
-	m->dev->f_mut = M_ISMUTE(m, m->dev->devno);
 
 	return 0;
 }
@@ -355,24 +371,4 @@ mixer_getnmixers(void)
 	(void)mixer_close(m);
 
 	return (si.nummixers);
-}
-
-/*
- * Free resources and close the mixer.
- */
-static int
-_mixer_close(struct mixer *m)
-{
-	struct mix_dev *dp;
-	int r;
-
-	r = close(m->fd);
-	while (!TAILQ_EMPTY(&m->devs)) {
-		dp = TAILQ_FIRST(&m->devs);
-		TAILQ_REMOVE(&m->devs, dp, devs);
-		free(dp);
-	}
-	free(m);
-
-	return (r);
 }

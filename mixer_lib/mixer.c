@@ -34,7 +34,6 @@
 #include "mixer.h"
 
 #define BASEPATH "/dev/mixer"
-#define MIN(x, y) ((x) < (y) ? (x) : (y))
 
 static int _mixer_readvol(struct mixer *, struct mix_dev *);
 
@@ -48,10 +47,8 @@ _mixer_readvol(struct mixer *m, struct mix_dev *dev)
 
 	if (ioctl(m->fd, MIXER_READ(dev->devno), &v) < 0)
 		return (-1);
-	dev->lvol = M_VOLNORM(v & 0x00ff);
-	dev->rvol = M_VOLNORM((v >> 8) & 0x00ff);
-	dev->pan = dev->rvol - dev->lvol;
-	dev->f_mut = M_ISMUTE(m, dev->devno);
+	dev->vol.left = M_VOLNORM(v & 0x00ff);
+	dev->vol.right = M_VOLNORM((v >> 8) & 0x00ff);
 
 	return (0);
 }
@@ -117,9 +114,6 @@ dunit:
 		dp->devno = i;
 		if (_mixer_readvol(m, dp) < 0)
 			goto fail;
-		dp->f_pbk = !M_ISREC(m, i) ? 1 : 0;
-		dp->f_rec = M_ISREC(m, i) ? 1 : 0;
-		dp->f_src = M_ISRECSRC(m, i) ? 1 : 0;
 		(void)strlcpy(dp->name, names[i], sizeof(dp->name));
 		TAILQ_INSERT_TAIL(&m->devs, dp, devs);
 		ndev++;
@@ -210,42 +204,22 @@ mixer_getdevbyname(struct mixer *m, const char *name)
  * be handlded by the caller.
  */
 int
-mixer_setvol(struct mixer *m, float l, float r)
+mixer_setvol(struct mixer *m, mix_volume_t vol)
 {
 	int v;
 
-	if (l < M_VOLMIN || l > M_VOLMAX || r < M_VOLMIN || r > M_VOLMAX) {
+	if (vol.left < M_VOLMIN || vol.left > M_VOLMAX || 
+	    vol.right < M_VOLMIN || vol.right > M_VOLMAX) {
 		errno = ERANGE;
 		return (-1);
 	}
-	v = M_VOLDENORM(l) | M_VOLDENORM(r) << 8;
+	v = M_VOLDENORM(vol.left) | M_VOLDENORM(vol.right) << 8;
 	if (ioctl(m->fd, MIXER_WRITE(m->dev->devno), &v) < 0)
 		return (-1);
 	if (_mixer_readvol(m, m->dev) < 0)
 		return (-1);
 
 	return (0);
-}
-
-/*
- * TODO: Change panning.
- *
- * @param: `pan`: Panning value. It has to be in the range
- *	`M_PANMIN <= pan <= M_PANMAX`.
- */
-int
-mixer_setpan(struct mixer *m, float pan)
-{
-	int l, r;
-
-	if (pan < M_PANMIN || pan > M_PANMAX) {
-		errno = ERANGE;
-		return (-1);
-	}
-	l = m->dev->lvol;
-	r = m->dev->rvol;
-
-	return (mixer_setvol(m, l, r));
 }
 
 int
@@ -268,8 +242,6 @@ mixer_setmute(struct mixer *m, int opt)
 	if (ioctl(m->fd, SOUND_MIXER_WRITE_MUTE, &m->mutemask) < 0)
 		return (-1);
 	if (ioctl(m->fd, SOUND_MIXER_READ_MUTE, &m->mutemask) < 0)
-		return (-1);
-	if (_mixer_readvol(m, m->dev) < 0)
 		return (-1);
 
 	return 0;
@@ -307,7 +279,6 @@ mixer_modrecsrc(struct mixer *m, int opt)
 		return (-1);
 	if (ioctl(m->fd, SOUND_MIXER_READ_RECSRC, &m->recsrc) < 0)
 		return (-1);
-	m->dev->f_src = M_ISRECSRC(m, m->dev->devno);
 
 	return (0);
 }

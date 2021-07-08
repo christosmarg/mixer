@@ -46,7 +46,7 @@ struct mix_ctl {
 static void	usage(void) __dead2;
 static void	printall(struct mixer *, int);
 static void	printminfo(struct mixer *, int);
-static void	printdev(struct mix_dev *, int);
+static void	printdev(struct mixer *, struct mix_dev *, int);
 static void	printrecsrc(struct mixer *, int);
 static int	findctl(const char *);
 /* Control handlers */
@@ -157,7 +157,7 @@ parse:
 		}
 		/* Input: `dev`. */
 		if (p == NULL) {
-			printdev(m->dev, 1);
+			printdev(m, m->dev, 1);
 			pall = 0;
 			goto next;
 		}
@@ -204,7 +204,7 @@ printall(struct mixer *m, int oflag)
 
 	printminfo(m, oflag);
 	TAILQ_FOREACH(dp, &m->devs, devs) {
-		printdev(dp, oflag);
+		printdev(m, dp, oflag);
 	}
 }
 
@@ -220,26 +220,31 @@ printminfo(struct mixer *m, int oflag)
 }
 
 static void
-printdev(struct mix_dev *d, int oflag)
+printdev(struct mixer *m, struct mix_dev *d, int oflag)
 {
+	float pan;
+
+	pan = d->vol.right - d->vol.left;
 	if (!oflag) {
 		printf("    %-11s= %.2f:%.2f\t%+.2f\t", 
-		    d->name, d->lvol, d->rvol, d->pan);
-		if (d->f_pbk)
-		       printf(" pbk");
-		if (d->f_rec)
-		       printf(" rec");
-		if (d->f_src)
+		    d->name, d->vol.left, d->vol.right, pan);
+		if (!M_ISREC(m, d->devno))
+			printf(" pbk");
+		if (M_ISREC(m, d->devno))
+			printf(" rec");
+		if (M_ISRECSRC(m, d->devno))
 			printf(" src");
-		if (d->f_mut)
+		if (M_ISMUTE(m, d->devno))
 			printf(" mute");
 		printf("\n");
 	} else {
 		printf("%s.%s=%.2f:%.2f\n", 
-		    d->name, ctls[MCTL_VOL].name, d->lvol, d->rvol);
-		if (d->f_src)
+		    d->name, ctls[MCTL_VOL].name, d->vol.left, d->vol.right);
+		printf("%s.%s=%d\n", 
+		    d->name, ctls[MCTL_MUT].name, M_ISMUTE(m, d->devno));
+		printf("%s.%s=%.2f\n", d->name, ctls[MCTL_PAN].name, pan);
+		if (M_ISRECSRC(m, d->devno))
 			printf("%s.%s=+\n", d->name, ctls[MCTL_SRC].name);
-		/* TODO: add f_mut */
 	}
 }
 
@@ -279,8 +284,9 @@ findctl(const char *ctl)
 static void
 mod_volume(struct mixer *m, const char *val)
 {
+	mix_volume_t v;
 	char lstr[8], rstr[8];
-	float l, r, lprev, rprev, lrel, rrel;
+	float lprev, rprev, lrel, rrel;
 	int n;
 
 	n = sscanf(val, "%7[^:]:%7s", lstr, rstr);
@@ -292,55 +298,47 @@ mod_volume(struct mixer *m, const char *val)
 	if (n > 0) {
 		if (*lstr == '+' || *lstr == '-')
 			lrel = rrel = 1;
-		l = strtof(lstr, NULL);
+		v.left = strtof(lstr, NULL);
 	}
 	if (n > 1) {
 		if (*rstr == '+' || *rstr == '-')
 			rrel = 1;
-		r = strtof(rstr, NULL);
+		v.right = strtof(rstr, NULL);
 	}
 	switch (n) {
 	case 1:
-		r = l; /* FALLTHROUGH */
+		v.right = v.left; /* FALLTHROUGH */
 	case 2:
 		if (lrel)
-			l += m->dev->lvol;
+			v.left += m->dev->vol.left;
 		if (rrel)
-			r += m->dev->rvol;
+			v.right += m->dev->vol.right;
 
-		if (l < M_VOLMIN)
-			l = M_VOLMIN;
-		else if (l > M_VOLMAX)
-			l = M_VOLMAX;
-		if (r < M_VOLMIN)
-			r = M_VOLMIN;
-		else if (r > M_VOLMAX)
-			r = M_VOLMAX;
+		if (v.left < M_VOLMIN)
+			v.left = M_VOLMIN;
+		else if (v.left > M_VOLMAX)
+			v.left = M_VOLMAX;
+		if (v.right < M_VOLMIN)
+			v.right = M_VOLMIN;
+		else if (v.right > M_VOLMAX)
+			v.right = M_VOLMAX;
 
-		lprev = m->dev->lvol;
-		rprev = m->dev->rvol;
-		if (mixer_setvol(m, l, r) < 0)
+		lprev = m->dev->vol.left;
+		rprev = m->dev->vol.right;
+		if (mixer_setvol(m, v) < 0)
 			warn("%s.%s=%.2f:%.2f", 
-			    m->dev->name, ctls[MCTL_VOL].name, l, r);
+			    m->dev->name, ctls[MCTL_VOL].name, v.left, v.right);
 		else
 			printf("%s.%s: %.2f:%.2f -> %.2f:%.2f\n",
 			   m->dev->name, ctls[MCTL_VOL].name, 
-			   lprev, rprev, l, r);
+			   lprev, rprev, v.left, v.right);
 	}
 }
 
 static void
 mod_panning(struct mixer *m, const char *val)
 {
-	float n, v;
-
-	n = m->dev->pan;
-	v = strtof(val, NULL);
-	if (mixer_setpan(m, v) < 0)
-		warn("%s.%s=%.2f", m->dev->name, ctls[MCTL_PAN].name, v);
-	else
-		printf("%s.%s: %.2f -> %.2f\n", 
-		    m->dev->name, ctls[MCTL_PAN].name, n, v);
+	/* XXX: */
 }
 
 static void
@@ -362,12 +360,12 @@ mod_mute(struct mixer *m, const char *val)
 		warnx("%c: no such modifier", *val);
 		return;
 	}
-	n = m->dev->f_mut;
+	n = M_ISMUTE(m, m->dev->devno);
 	if (mixer_setmute(m, opt) < 0)
 		warn("%s.%s=%c", m->dev->name, ctls[MCTL_MUT].name, *val);
 	else
 		printf("%s.%s: %d -> %d\n",
-		    m->dev->name, ctls[MCTL_MUT].name, n, m->dev->f_mut);
+		    m->dev->name, ctls[MCTL_MUT].name, n, M_ISMUTE(m, m->dev->devno));
 }
 
 static void
@@ -392,37 +390,38 @@ mod_recsrc(struct mixer *m, const char *val)
 		warnx("%c: no such modifier", *val);
 		return;
 	}
-	n = m->dev->f_src;
+	n = M_ISRECSRC(m, m->dev->devno);
 	if (mixer_modrecsrc(m, opt) < 0)
 		warn("%s.%s=%c", m->dev->name, ctls[MCTL_SRC].name, *val);
 	else
 		printf("%s.%s: %d -> %d\n", 
-		    m->dev->name, ctls[MCTL_SRC].name, n, m->dev->f_src);
+		    m->dev->name, ctls[MCTL_SRC].name, 
+		    n, M_ISRECSRC(m, m->dev->devno));
 }
 
 static void
 print_volume(struct mixer *m)
 {
 	printf("%s.%s=%.2f:%.2f\n", 
-	    m->dev->name, ctls[MCTL_VOL].name, m->dev->lvol, m->dev->rvol);
+	    m->dev->name, ctls[MCTL_VOL].name, m->dev->vol.left, m->dev->vol.right);
 }
 
 static void
 print_panning(struct mixer *m)
 {
-	printf("%s.%s=%.2f\n", 
-	    m->dev->name, ctls[MCTL_PAN].name, m->dev->pan);
+	/* XXX: */
 }
 
 static void
 print_mute(struct mixer *m)
 {
-	printf("%s.%s=%d\n", m->dev->name, ctls[MCTL_MUT].name, m->dev->f_mut);
+	printf("%s.%s=%d\n", m->dev->name, ctls[MCTL_MUT].name,
+	    M_ISMUTE(m, m->dev->devno));
 }
 
 static void
 print_recsrc(struct mixer *m)
 {
 	printf("%s.%s=%d\n",
-	    m->dev->name, ctls[MCTL_SRC].name, m->dev->f_rec);
+	    m->dev->name, ctls[MCTL_SRC].name, M_ISRECSRC(m, m->dev->devno));
 }

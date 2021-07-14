@@ -39,9 +39,7 @@ Mixer library (libmixer, -lmixer)
 .Ft struct mix_dev *
 .Fn mixer_getdevbyname "struct mixer *m" "name"
 .Ft int
-.Fn mixer_setvol "struct mixer *m" "float lvol" "float rvol"
-.Ft int
-.Fn mixer_setpan "struct mixer *m" "float pan"
+.Fn mixer_setvol "struct mixer *m" "mixer_volume_t vol"
 .Ft int
 .Fn mixer_setmute "struct mixer *m" "int opt"
 .Ft int

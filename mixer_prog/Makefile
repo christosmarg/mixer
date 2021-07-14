@@ -5,6 +5,6 @@ BINDIR=         /usr/sbin
 SRCS=		${PROG}.c
 MAN=		${PROG}.8
 CFLAGS+=	-pedantic -Wall -Wunused
-LDFLAGS+=	-lmixer -lm # FIXME: why -lm?
+LDFLAGS+=	-lmixer -lm
 
 .include <bsd.prog.mk>

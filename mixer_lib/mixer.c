@@ -26,6 +26,7 @@
 
 #include <errno.h>
 #include <fcntl.h>
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -37,9 +38,9 @@
 
 static int _mixer_readvol(struct mixer *, struct mix_dev *);
 
-static const char *names[SOUND_MIXER_NRDEVICES] = SOUND_DEVICE_NAMES;
-static int ndev = 0;
-
+/*
+ * Fetch volume from the device.
+ */
 static int
 _mixer_readvol(struct mixer *m, struct mix_dev *dev)
 {
@@ -54,18 +55,22 @@ _mixer_readvol(struct mixer *m, struct mix_dev *dev)
 }
 
 /*
- * Open a mixer device in `/dev/mixerN`, where N is the number of the mixer 
- * file. Each device maps to an actual pcmN audio card, so `/dev/mixer0` 
- * is the mixer device for pcm0, and so on.
+ * Open a mixer device in `/dev/mixerN`, where N is the number of the mixer.
+ * Each device maps to an actual pcmN audio card, so `/dev/mixer0` is the 
+ * mixer device for pcm0, and so on.
  *
- * @param: `name`: path to a mixer device. If it's NULL or "/dev/mixer", 
- *	we open the default mixer (i.e `hw.snd.default_unit`).
+ * @param name		path to mixer device. NULL or "/dev/mixer" for the
+ *			the default mixer (i.e `hw.snd.default_unit`).
+ *
+ * @retval mixer	success
+ * @retval NULL		fail
  */
 struct mixer *
 mixer_open(const char *name)
 {
 	struct mixer *m = NULL;
 	struct mix_dev *dp;
+	const char *names[SOUND_MIXER_NRDEVICES] = SOUND_DEVICE_NAMES;
 	int i;
 
 	if ((m = calloc(1, sizeof(struct mixer))) == NULL)
@@ -116,7 +121,7 @@ dunit:
 			goto fail;
 		(void)strlcpy(dp->name, names[i], sizeof(dp->name));
 		TAILQ_INSERT_TAIL(&m->devs, dp, devs);
-		ndev++;
+		m->ndev++;
 	}
 
 	/* The default device is always "vol". */
@@ -155,7 +160,7 @@ mixer_getdev(struct mixer *m, int dev)
 {
 	struct mix_dev *dp;
 
-	if (dev < 0 || dev >= ndev) {
+	if (dev < 0 || dev >= m->ndev) {
 		errno = ERANGE;
 		return (NULL);
 	}
@@ -176,7 +181,7 @@ mixer_getdev(struct mixer *m, int dev)
  *
  * The caller has to assign the return value to `m->dev`.
  *
- * @param: `name`: device name (e.g vol, pcm, ...)
+ * @param name		device name (e.g vol, pcm, ...)
  */
 struct mix_dev *
 mixer_getdevbyname(struct mixer *m, const char *name)
@@ -259,16 +264,16 @@ mixer_modrecsrc(struct mixer *m, int opt)
 		return (-1);
 	}
 	switch (opt) {
-	case M_ADDRECDEV:
+	case M_ADDRECSRC:
 		m->recsrc |= (1 << m->dev->devno);
 		break;
-	case M_REMOVERECDEV:
+	case M_REMOVERECSRC:
 		m->recsrc &= ~(1 << m->dev->devno);
 		break;
-	case M_SETRECDEV:
+	case M_SETRECSRC:
 		m->recsrc = (1 << m->dev->devno);
 		break;
-	case M_TOGGLERECDEV:
+	case M_TOGGLERECSRC:
 		m->recsrc ^= (1 << m->dev->devno);
 		break;
 	default:
@@ -305,7 +310,7 @@ mixer_getdunit(void)
  * it's useful to have, so the caller can avoid having to manually use
  * the sysctl API.
  * 
- * @param: `unit`: the audio card number (e.g pcm0, pcm1, ...).
+ * @param unit		the audio card number (e.g pcm0, pcm1, ...).
  */
 int
 mixer_setdunit(struct mixer *m, int unit)

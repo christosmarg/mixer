@@ -51,17 +51,14 @@ static void	printrecsrc(struct mixer *, int);
 static int	findctl(const char *);
 /* Control handlers */
 static void	mod_volume(struct mixer *, const char *);
-static void	mod_panning(struct mixer *, const char *);
 static void	mod_mute(struct mixer *, const char *);
 static void	mod_recsrc(struct mixer *, const char *);
 static void	print_volume(struct mixer *);
-static void	print_panning(struct mixer *);
 static void	print_mute(struct mixer *);
 static void	print_recsrc(struct mixer *);
 
 static const struct mix_ctl ctls[] = {
 	[MCTL_VOL] = { "volume",	mod_volume,	print_volume },
-	[MCTL_PAN] = { "panning",	mod_panning,	print_panning },
 	[MCTL_MUT] = { "mute",		mod_mute,	print_mute },
 	[MCTL_SRC] = { "recsrc",	mod_recsrc,	print_recsrc },
 };
@@ -222,12 +219,9 @@ printminfo(struct mixer *m, int oflag)
 static void
 printdev(struct mixer *m, struct mix_dev *d, int oflag)
 {
-	float pan;
-
-	pan = d->vol.right - d->vol.left;
 	if (!oflag) {
-		printf("    %-11s= %.2f:%.2f\t%+.2f\t", 
-		    d->name, d->vol.left, d->vol.right, pan);
+		printf("    %-11s= %.2f:%.2f\t", 
+		    d->name, d->vol.left, d->vol.right);
 		if (!M_ISREC(m, d->devno))
 			printf(" pbk");
 		if (M_ISREC(m, d->devno))
@@ -242,7 +236,6 @@ printdev(struct mixer *m, struct mix_dev *d, int oflag)
 		    d->name, ctls[MCTL_VOL].name, d->vol.left, d->vol.right);
 		printf("%s.%s=%d\n", 
 		    d->name, ctls[MCTL_MUT].name, M_ISMUTE(m, d->devno));
-		printf("%s.%s=%.2f\n", d->name, ctls[MCTL_PAN].name, pan);
 		if (M_ISRECSRC(m, d->devno))
 			printf("%s.%s=+\n", d->name, ctls[MCTL_SRC].name);
 	}
@@ -336,12 +329,6 @@ mod_volume(struct mixer *m, const char *val)
 }
 
 static void
-mod_panning(struct mixer *m, const char *val)
-{
-	/* XXX: */
-}
-
-static void
 mod_mute(struct mixer *m, const char *val)
 {
 	int n, opt = -1;
@@ -375,16 +362,16 @@ mod_recsrc(struct mixer *m, const char *val)
 
 	switch (*val) {
 	case '+':
-		opt = M_ADDRECDEV;
+		opt = M_ADDRECSRC;
 		break;
 	case '-':
-		opt = M_REMOVERECDEV;
+		opt = M_REMOVERECSRC;
 		break;
 	case '=':
-		opt = M_SETRECDEV;
+		opt = M_SETRECSRC;
 		break;
 	case '^':
-		opt = M_TOGGLERECDEV;
+		opt = M_TOGGLERECSRC;
 		break;
 	default:
 		warnx("%c: no such modifier", *val);
@@ -404,12 +391,6 @@ print_volume(struct mixer *m)
 {
 	printf("%s.%s=%.2f:%.2f\n", 
 	    m->dev->name, ctls[MCTL_VOL].name, m->dev->vol.left, m->dev->vol.right);
-}
-
-static void
-print_panning(struct mixer *m)
-{
-	/* XXX: */
 }
 
 static void

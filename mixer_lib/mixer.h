@@ -34,30 +34,20 @@ __FBSDID("$FreeBSD$");
 #include <limits.h>
 #include <math.h>
 
-#define M_ADDRECDEV		0x01
-#define M_REMOVERECDEV		0x02
-#define M_SETRECDEV		0x04
-#define M_TOGGLERECDEV		0x08
-
-#define M_MUTE			0x01
-#define M_UNMUTE		0x02
-#define M_TOGGLEMUTE		0x04
-
-#define M_VOLMIN		0.0f
-#define M_VOLMAX		1.0f
-#define M_VOLNORM(v)		((v) / 100.0f)
-#define M_VOLDENORM(v)		((int)roundf((v) * 100.0f))
-
-#define M_ISSET(n, f)		(((1 << (n)) & (f)) ? 1 : 0)
-#define M_ISDEV(m, n)		M_ISSET(n, (m)->devmask)
-#define M_ISMUTE(m, n)		M_ISSET(n, (m)->mutemask)
-#define M_ISREC(m, n)		M_ISSET(n, (m)->recmask)
-#define M_ISRECSRC(m, n)	M_ISSET(n, (m)->recsrc)
+#define M_ISSET(n,f)	(((1 << (n)) & (f)) ? 1 : 0)
+#define M_ISDEV(m,n)	M_ISSET(n, (m)->devmask)
+#define M_ISMUTE(m,n)	M_ISSET(n, (m)->mutemask)
+#define M_ISREC(m,n)	M_ISSET(n, (m)->recmask)
+#define M_ISRECSRC(m,n)	M_ISSET(n, (m)->recsrc)
 
 struct mix_dev {
 	char name[NAME_MAX];
 	int devno;
 	struct mix_volume {
+#define M_VOLMIN	0.0f
+#define M_VOLMAX	1.0f
+#define M_VOLNORM(v)	((v) / 100.0f)
+#define M_VOLDENORM(v)	((int)roundf((v) * 100.0f))
 		float left;
 		float right;
 	} vol;
@@ -72,9 +62,17 @@ struct mixer {
 	char name[NAME_MAX];
 	int fd;
 	int unit;
+	int ndev;
 	int devmask;
+#define M_MUTE		0x01
+#define M_UNMUTE	0x02
+#define M_TOGGLEMUTE	0x04
 	int mutemask;
 	int recmask;
+#define M_ADDRECSRC	0x01
+#define M_REMOVERECSRC	0x02
+#define M_SETRECSRC	0x04
+#define M_TOGGLERECSRC	0x08
 	int recsrc;
 	int f_default;
 };

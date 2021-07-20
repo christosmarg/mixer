@@ -205,6 +205,7 @@ printall(struct mixer *m, int oflag)
 	}
 }
 
+/* TODO: print play/rec */
 static void
 printminfo(struct mixer *m, int oflag)
 {

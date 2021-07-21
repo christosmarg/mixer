@@ -34,20 +34,20 @@ __FBSDID("$FreeBSD$");
 #include <limits.h>
 #include <math.h>
 
-#define M_ISSET(n,f)	(((1 << (n)) & (f)) ? 1 : 0)
-#define M_ISDEV(m,n)	M_ISSET(n, (m)->devmask)
-#define M_ISMUTE(m,n)	M_ISSET(n, (m)->mutemask)
-#define M_ISREC(m,n)	M_ISSET(n, (m)->recmask)
-#define M_ISRECSRC(m,n)	M_ISSET(n, (m)->recsrc)
+#define MIX_ISSET(n,f)		(((1 << (n)) & (f)) ? 1 : 0)
+#define MIX_ISDEV(m,n)		MIX_ISSET(n, (m)->devmask)
+#define MIX_ISMUTE(m,n)		MIX_ISSET(n, (m)->mutemask)
+#define MIX_ISREC(m,n)		MIX_ISSET(n, (m)->recmask)
+#define MIX_ISRECSRC(m,n)	MIX_ISSET(n, (m)->recsrc)
 
 struct mix_dev {
 	char name[NAME_MAX];
 	int devno;
 	struct mix_volume {
-#define M_VOLMIN	0.0f
-#define M_VOLMAX	1.0f
-#define M_VOLNORM(v)	((v) / 100.0f)
-#define M_VOLDENORM(v)	((int)roundf((v) * 100.0f))
+#define MIX_VOLMIN		0.0f
+#define MIX_VOLMAX		1.0f
+#define MIX_VOLNORM(v)		((v) / 100.0f)
+#define MIX_VOLDENORM(v)	((int)roundf((v) * 100.0f))
 		float left;
 		float right;
 	} vol;
@@ -64,15 +64,15 @@ struct mixer {
 	int unit;
 	int ndev;
 	int devmask;
-#define M_MUTE		0x01
-#define M_UNMUTE	0x02
-#define M_TOGGLEMUTE	0x04
+#define MIX_MUTE		0x01
+#define MIX_UNMUTE		0x02
+#define MIX_TOGGLEMUTE		0x04
 	int mutemask;
 	int recmask;
-#define M_ADDRECSRC	0x01
-#define M_REMOVERECSRC	0x02
-#define M_SETRECSRC	0x04
-#define M_TOGGLERECSRC	0x08
+#define MIX_ADDRECSRC		0x01
+#define MIX_REMOVERECSRC	0x02
+#define MIX_SETRECSRC		0x04
+#define MIX_TOGGLERECSRC	0x08
 	int recsrc;
 	int f_default;
 };

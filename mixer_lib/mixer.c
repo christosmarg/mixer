@@ -48,22 +48,22 @@ _mixer_readvol(struct mixer *m, struct mix_dev *dev)
 
 	if (ioctl(m->fd, MIXER_READ(dev->devno), &v) < 0)
 		return (-1);
-	dev->vol.left = M_VOLNORM(v & 0x00ff);
-	dev->vol.right = M_VOLNORM((v >> 8) & 0x00ff);
+	dev->vol.left = MIX_VOLNORM(v & 0x00ff);
+	dev->vol.right = MIX_VOLNORM((v >> 8) & 0x00ff);
 
 	return (0);
 }
 
 /*
  * Open a mixer device in `/dev/mixerN`, where N is the number of the mixer.
- * Each device maps to an actual pcmN audio card, so `/dev/mixer0` is the 
- * mixer device for pcm0, and so on.
+ * Each device maps to an actual pcm audio card, so `/dev/mixer0` is the 
+ * mixer for pcm0, and so on.
  *
  * @param name		path to mixer device. NULL or "/dev/mixer" for the
  *			the default mixer (i.e `hw.snd.default_unit`).
  *
  * @retval mixer	success
- * @retval NULL		fail
+ * @retval NULL		failure
  */
 struct mixer *
 mixer_open(const char *name)
@@ -112,7 +112,7 @@ dunit:
 
 	TAILQ_INIT(&m->devs);
 	for (i = 0; i < SOUND_MIXER_NRDEVICES; i++) {
-		if (!M_ISDEV(m, i))
+		if (!MIX_ISDEV(m, i))
 			continue;
 		if ((dp = calloc(1, sizeof(struct mix_dev))) == NULL)
 			goto fail;
@@ -137,6 +137,9 @@ fail:
 
 /*
  * Free resources and close the mixer.
+ *
+ * @retval 0		success
+ * @retval -1		failure
  */
 int
 mixer_close(struct mixer *m)
@@ -155,6 +158,19 @@ mixer_close(struct mixer *m)
 	return (r);
 }
 
+/*
+ * Select a mixer device. The mixer structure keeps a list of all the devices
+ * the mixer has, but only one can be manipulated at a time -- this is what
+ * the `dev` in the mixer structure field is for. Each time a device is to be
+ * manipulated, `dev` has to point to it first.
+ *
+ * The caller must manually assign the return value to `m->dev`.
+ *
+ * @param dev		device number; `devno` field of `mix_dev`
+ *
+ * @retval dev		success
+ * @retval NULL		failure
+ */
 struct mix_dev *
 mixer_getdev(struct mixer *m, int dev)
 {
@@ -174,14 +190,12 @@ mixer_getdev(struct mixer *m, int dev)
 }
 
 /*
- * Select a mixer device (e.g vol, pcm, mic) by name. The mixer structure
- * keeps a list of all the devices the mixer has, but only one can be
- * manipulated at a time -- this is what the `dev` field is for. Each
- * time we want to manipulate a device, `dev` has to point to it first.
- *
- * The caller has to assign the return value to `m->dev`.
+ * Select a device by name.
  *
  * @param name		device name (e.g vol, pcm, ...)
+ *
+ * @retval dev		success
+ * @retval NULL		failure
  */
 struct mix_dev *
 mixer_getdevbyname(struct mixer *m, const char *name)
@@ -199,26 +213,29 @@ mixer_getdevbyname(struct mixer *m, const char *name)
 
 /*
  * Change the mixer's left and right volume. The allowed volume values are
- * between M_VOLMIN and M_VOLMAX. The `ioctl` for volume change requires
+ * between MIX_VOLMIN and MIX_VOLMAX. The `ioctl` for volume change requires
  * an integer value between 0 and 100 stored as `lvol | rvol << 8` --  for
  * that reason, we de-normalize the 32-bit float volume value, before
  * we pass it to the `ioctl`.
  *
- * If the volumes passed are not in the range `M_VOLMIN <= vol <= M_VOLMAX`,
- * we return an error and `errno` is set to ERANGE. Volume clumping should
- * be handlded by the caller.
+ * Volume clumping should be done by the caller.
+ *
+ * @param vol		left/right volume structure.
+ *
+ * @retval 0		success
+ * @retval -1		failure
  */
 int
 mixer_setvol(struct mixer *m, mix_volume_t vol)
 {
 	int v;
 
-	if (vol.left < M_VOLMIN || vol.left > M_VOLMAX || 
-	    vol.right < M_VOLMIN || vol.right > M_VOLMAX) {
+	if (vol.left < MIX_VOLMIN || vol.left > MIX_VOLMAX || 
+	    vol.right < MIX_VOLMIN || vol.right > MIX_VOLMAX) {
 		errno = ERANGE;
 		return (-1);
 	}
-	v = M_VOLDENORM(vol.left) | M_VOLDENORM(vol.right) << 8;
+	v = MIX_VOLDENORM(vol.left) | MIX_VOLDENORM(vol.right) << 8;
 	if (ioctl(m->fd, MIXER_WRITE(m->dev->devno), &v) < 0)
 		return (-1);
 	if (_mixer_readvol(m, m->dev) < 0)
@@ -227,17 +244,27 @@ mixer_setvol(struct mixer *m, mix_volume_t vol)
 	return (0);
 }
 
+/*
+ * Manipulate a device's mute.
+ *
+ * @param opt		MIX_MUTE mute device
+ *			MIX_UNMUTE unmute device
+ *			MIX_TOGGLEMUTE toggle device's mute
+ *
+ * @retval 0		success
+ * @retval -1		failure
+ */
 int
 mixer_setmute(struct mixer *m, int opt)
 {
 	switch (opt) {
-	case M_MUTE:
+	case MIX_MUTE:
 		m->mutemask |= (1 << m->dev->devno);
 		break;
-	case M_UNMUTE:
+	case MIX_UNMUTE:
 		m->mutemask &= ~(1 << m->dev->devno);
 		break;
-	case M_TOGGLEMUTE:
+	case MIX_TOGGLEMUTE:
 		m->mutemask ^= (1 << m->dev->devno);
 		break;
 	default:
@@ -253,27 +280,35 @@ mixer_setmute(struct mixer *m, int opt)
 }
 
 /*
- * Modify the mixer's selected device flags. The `recsrc` flag tells
- * us if a device is a recording source.
+ * Modify a recording device. The selected device has to be a recording device,
+ * otherwise the function will fail.
+ *
+ * @param opt		MIX_ADDRECSRC add device to recording sources
+ *			MIX_REMOVERECSRC remove device from recording sources
+ *			MIX_SETRECSRC set device as the only recording source
+ *			MIX_TOGGLERECSRC toggle device from recording sources
+ *
+ * @retval 0		success
+ * @retval -1		failure
  */
 int
 mixer_modrecsrc(struct mixer *m, int opt)
 {
-	if (!m->recmask || !M_ISREC(m, m->dev->devno)) {
+	if (!m->recmask || !MIX_ISREC(m, m->dev->devno)) {
 		errno = ENODEV;
 		return (-1);
 	}
 	switch (opt) {
-	case M_ADDRECSRC:
+	case MIX_ADDRECSRC:
 		m->recsrc |= (1 << m->dev->devno);
 		break;
-	case M_REMOVERECSRC:
+	case MIX_REMOVERECSRC:
 		m->recsrc &= ~(1 << m->dev->devno);
 		break;
-	case M_SETRECSRC:
+	case MIX_SETRECSRC:
 		m->recsrc = (1 << m->dev->devno);
 		break;
-	case M_TOGGLERECSRC:
+	case MIX_TOGGLERECSRC:
 		m->recsrc ^= (1 << m->dev->devno);
 		break;
 	default:
@@ -291,6 +326,9 @@ mixer_modrecsrc(struct mixer *m, int opt)
 /*
  * Get default audio card's number. This is used to open the default mixer
  * and set the mixer structure's `f_default` flag.
+ *
+ * @retval unit		success
+ * @retval -1		failure
  */
 int
 mixer_getdunit(void)
@@ -311,6 +349,9 @@ mixer_getdunit(void)
  * the sysctl API.
  * 
  * @param unit		the audio card number (e.g pcm0, pcm1, ...).
+ *
+ * @retval 0		success
+ * @retval -1		failure
  */
 int
 mixer_setdunit(struct mixer *m, int unit)
@@ -327,6 +368,9 @@ mixer_setdunit(struct mixer *m, int unit)
 
 /*
  * Get the total number of mixers in the system.
+ *
+ * @retval nmixers	success
+ * @retval -1		failure
  */
 int
 mixer_getnmixers(void)

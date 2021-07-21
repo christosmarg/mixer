@@ -24,14 +24,27 @@
 .Dt mixer 3
 .Os
 .Sh NAME
-.Nm mixer
-.Nd an OSS mixer library
+.Nm mixer_open ,
+.Nm mixer_close ,
+.Nm mixer_getdev ,
+.Nm mixer_getdevbyname ,
+.Nm mixer_setvol ,
+.Nm mixer_setmute ,
+.Nm mixer_modrecsrc ,
+.Nm mixer_getdunit ,
+.Nm mixer_setdunit ,
+.Nm mixer_getnmixers ,
+.Nm MIX_ISDEV ,
+.Nm MIX_ISMUTE ,
+.Nm MIX_ISREC ,
+.Nm MIX_ISRECSRC
+.Nd interface to OSS mixers
 .Sh LIBRARY
 Mixer library (libmixer, -lmixer)
 .Sh SYNOPSIS
 .In mixer.h
 .Ft struct mixer *
-.Fn mixer_open "const char *path"
+.Fn mixer_open "const char *name"
 .Ft int
 .Fn mixer_close "struct mixer *m"
 .Ft struct mix_dev *
@@ -39,7 +52,7 @@ Mixer library (libmixer, -lmixer)
 .Ft struct mix_dev *
 .Fn mixer_getdevbyname "struct mixer *m" "name"
 .Ft int
-.Fn mixer_setvol "struct mixer *m" "mixer_volume_t vol"
+.Fn mixer_setvol "struct mixer *m" "mix_volume_t vol"
 .Ft int
 .Fn mixer_setmute "struct mixer *m" "int opt"
 .Ft int
@@ -50,9 +63,269 @@ Mixer library (libmixer, -lmixer)
 .Fn mixer_setdunit "struct mixer *m" "int unit"
 .Ft int
 .Fn mixer_getnmixers "void"
+.Ft int
+.Fn MIX_ISDEV "struct mixer *m" "int devno"
+.Ft int
+.Fn MIX_ISMUTE "struct mixer *m" "int devno"
+.Ft int
+.Fn MIX_ISREC "struct mixer *m" "int devno"
+.Ft int
+.Fn MIX_ISRECSRC "struct mixer *m" "int devno"
 .Sh DESCRIPTION
-.\" TODO
+The
+.Nm mixer
+library allows userspace programs to access and manipulate OSS sound mixers in
+a simple way.
+.Ss Mixer
+.Pp
+A mixer is described by the following structure:
+.Bd -literal
+struct mixer {
+	TAILQ_HEAD(, mix_dev) devs;
+	struct mix_dev *dev;
+	oss_mixerinfo mi;
+	oss_card_info ci;
+	char name[NAME_MAX];
+	int fd;
+	int unit;
+	int ndev;
+	int devmask;
+#define MIX_MUTE		0x01
+#define MIX_UNMUTE		0x02
+#define MIX_TOGGLEMUTE		0x04
+	int mutemask;
+	int recmask;
+#define MIX_ADDRECSRC		0x01
+#define MIX_REMOVERECSRC	0x02
+#define MIX_SETRECSRC		0x04
+#define MIX_TOGGLERECSRC	0x08
+	int recsrc;
+	int f_default;
+};
+.Ed
+.Ss Mixer device
+.Pp
+Each mixer device stored in a mixer structure is described as follows:
+.Bd -literal
+struct mix_dev {
+	char name[NAME_MAX];
+	int devno;
+	struct mix_volume {
+#define MIX_VOLMIN		0.0f
+#define MIX_VOLMAX		1.0f
+#define MIX_VOLNORM(v)		((v) / 100.0f)
+#define MIX_VOLDENORM(v)	((int)roundf((v) * 100.0f))
+		float left;
+		float right;
+	} vol;
+	TAILQ_ENTRY(mix_dev) devs;
+};
+.Ed
+.Ss Device names
+The name a device is guaranteed to be one of the following:
+.Bd -ragged -offset indent
+vol, bass, treble, synth, pcm, speaker, line, mic, cd, mix,
+pcm2, rec, igain, ogain, line1, line2, line3, dig1, dig2, dig3,
+phin, phout, video, radio, and monitor.
+.Ed
+.Ss Opening and closing the mixer
+.Pp
+The application must first call the
+.Fn mixer_open
+function to obtain a handle to the device, which is used as an argument
+in most other functions and macros. The parameter
+.Ar name
+specifies the path to the mixer. OSS mixers are stored under
+.Ar /dev/mixerN
+where
+.Ar N
+is the number of the mixer device. Each device maps to an actual
+.Ar pcm
+audio card, so
+.Ar /dev/mixer0
+is the mixer for
+.Ar pcm0 ,
+and so on. If
+.Ar name
+is
+.Ar NULL
+or
+.Ar /dev/mixer ,
+.Fn mixer_open
+opens the default mixer (hw.snd.defaul_unit).
+.Pp
+The
+.Fn mixer_close
+function frees resources and closes the mixer device. It's a good practice to
+always call it when the application is done using the mixer.
+.Ss Manipulating the mixer
+.Pp
+The
+.Fn mixer_getdev
+and
+.Fn mixer_getdevbyname
+functions select a mixer device, either by its number or by its name
+respectively. The mixer structure keeps a list of all the devices, but only
+one can be manipulated at a time. Each time a new device is to be manipulated,
+one of the two functions has to be called.
+.Pp
+The
+.Fn mixer_setvol
+function changes the volume of the selected mixer device. The
+.Ar vol
+parameter is a structure that stores the left and right volumes of a given
+device. The allowed volume values are between MIX_VOLMIN (0.0) and
+MIX_VOLMAX (1.0).
+.Pp
+The
+.Fn mixer_setmute
+function modifies the mute of a selected device. The
+.Ar opt
+parameter has to be one of the following options:
+.Bl -tag -width MIX_TOGGLEMUTE -offset indent
+.It Dv MIX_MUTE
+Mute the device.
+.It Dv MIX_UNMUTE
+Unmute the device.
+.It Dv MIX_TOGGLEMUTE
+Toggle the device's mute (e.g mute if unmuted and unmute if muted).
+.El
+.Pp
+The
+.Fn mixer_modrecsrc
+function modifies a recording device. The selected device has to be
+a recording device, otherwise the function will fail. The
+.Ar opt
+parameter has to be one of the following options:
+.Bl -tag -width MIX_REMOVERECSRC -offset indent
+.It Dv MIX_ADDRECSRC
+Add device to the recording sources.
+.It Dv MIX_REMOVERECSRC
+Remove device from the recording sources.
+.It Dv MIX_SETRECSRC
+Set device as the only recording source.
+.It Dv MIX_TOGGLERECSRC
+Toggle device from the recording sources.
+.El
+.Pp
+The
+.Fn mixer_getdunit
+and
+.Fn mixer_setdunit
+functions get and set the default audio card in the system. Although this is
+not really a mixer feature, it's useful to have instead of having to use
+the
+.Xr sysctl 3
+controls.
+.Pp
+The
+.Fn mixer_getnmixers
+function returns the total number of mixer devices in the system.
+.Pp
+The
+.Fn MIX_ISDEV
+macro checks if a device is actually a valid device for a given mixer. It's very
+unlikely that this macro will ever be needed since the library stores only
+valid devices by default.
+.Pp
+The
+.Fn MIX_ISMUTE
+macro checks if a device is muted.
+.Pp
+The
+.Fn MIX_ISREC
+macro checks if a device is a recording device.
+.Pp
+The
+.Fn MIX_ISRECSRC
+macro checks if a device is a recording source.
+.Sh RETURN VALUES
+.Pp
+The
+.Fn mixer_open
+function returns the newly created handle on success and NULL on failure.
+.Pp
+The
+.Fn mixer_close ,
+.Fn mixer_setvol ,
+.Fn mixer_setmute ,
+.Fn mixer_modrecsrc ,
+.Fn mixer_getdunut ,
+.Fn mixer_setdunit
+and
+.Fn mixer_getnmixers
+functions return 0 or positive values on success and -1 on failure.
+.Pp
+The
+.Fn mixer_getdev
+and
+.Fn mixer_getdevbyname
+functions return the selected device on success and NULL on failure.
+.Pp
+All functions set the value of
+.Ar errno
+on failure.
+.Sh EXAMPLES
+.Ss Change the volume of a device
+.Bd -literal
+struct mixer *m;
+mix_volume_t vol;
+char *mix_name, *dev_name;
+
+mix_name = ...;
+if ((m = mixer_open(mix_name)) == NULL)
+	err(1, "mixer_open: %s", mix_name);
+
+dev_name = ...;
+if ((m->dev = mixer_getdevbyname(m, dev_name)) < 0)
+	err(1, "unknown device: %s", dev_name);
+
+vol.left = ...;
+vol.right = ....;
+if (mixer_setvol(m, vol) < 0)
+	warn("cannot change volume");
+
+(void)mixer_close(m);
+.Ed
+.Ss Mute all unmuted devices
+.Bd -literal
+struct mixer *m;
+struct mix_dev *dp;
+
+if ((m = mixer_open(NULL)) == NULL)	/* Open the default mixer. */
+	err(1, "mixer_open");
+TAILQ_FOREACH(dp, &m->devs, devs) {
+	m->dev = dp;			/* Select device. */
+	if (M_ISMUTE(m, dp->devno))
+		continue;
+	if (mixer_setmute(m, MIX_MUTE) < 0)
+		warn("cannot mute device: %s", dp->name);
+}
+
+(void)mixer_close(m);
+.Ed
+.Ss Print all recording sources' names and volumes
+.Bd -literal
+struct mixer *m;
+struct mix_dev *dp;
+
+char *mix_name, *dev_name;
+
+mix_name = ...;
+if ((m = mixer_open(mix_name)) == NULL)
+	err(1, "mixer_open: %s", mix_name);
+
+TAILQ_FOREACH(dp, &m->devs, devs) {
+	if (M_ISRECSRC(m, dp->devno))
+		printf("%s\\t%.2f:%.2f\\n",
+		    dp->name, dp->vol.left, dp->vol.right);
+}
+
+(void)mixer_close(m);
+.Ed
 .Sh SEE ALSO
-.Xr sound 4
+.Xr mixer 8 ,
+.Xr sound 4 ,
+.Xr errno 2
 .Sh AUTHORS
 .An Christos Margiolis Aq Mt christos@margiolis.net

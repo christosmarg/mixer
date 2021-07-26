@@ -61,9 +61,6 @@ _mixer_readvol(struct mixer *m, struct mix_dev *dev)
  *
  * @param name		path to mixer device. NULL or "/dev/mixer" for the
  *			the default mixer (i.e `hw.snd.default_unit`).
- *
- * @retval mixer	success
- * @retval NULL		failure
  */
 struct mixer *
 mixer_open(const char *name)
@@ -137,9 +134,6 @@ fail:
 
 /*
  * Free resources and close the mixer.
- *
- * @retval 0		success
- * @retval -1		failure
  */
 int
 mixer_close(struct mixer *m)
@@ -165,11 +159,6 @@ mixer_close(struct mixer *m)
  * manipulated, `dev` has to point to it first.
  *
  * The caller must manually assign the return value to `m->dev`.
- *
- * @param dev		device number; `devno` field of `mix_dev`
- *
- * @retval dev		success
- * @retval NULL		failure
  */
 struct mix_dev *
 mixer_getdev(struct mixer *m, int dev)
@@ -193,9 +182,6 @@ mixer_getdev(struct mixer *m, int dev)
  * Select a device by name.
  *
  * @param name		device name (e.g vol, pcm, ...)
- *
- * @retval dev		success
- * @retval NULL		failure
  */
 struct mix_dev *
 mixer_getdevbyname(struct mixer *m, const char *name)
@@ -219,11 +205,6 @@ mixer_getdevbyname(struct mixer *m, const char *name)
  * we pass it to the `ioctl`.
  *
  * Volume clumping should be done by the caller.
- *
- * @param vol		left/right volume structure.
- *
- * @retval 0		success
- * @retval -1		failure
  */
 int
 mixer_setvol(struct mixer *m, mix_volume_t vol)
@@ -250,9 +231,6 @@ mixer_setvol(struct mixer *m, mix_volume_t vol)
  * @param opt		MIX_MUTE mute device
  *			MIX_UNMUTE unmute device
  *			MIX_TOGGLEMUTE toggle device's mute
- *
- * @retval 0		success
- * @retval -1		failure
  */
 int
 mixer_setmute(struct mixer *m, int opt)
@@ -287,9 +265,6 @@ mixer_setmute(struct mixer *m, int opt)
  *			MIX_REMOVERECSRC remove device from recording sources
  *			MIX_SETRECSRC set device as the only recording source
  *			MIX_TOGGLERECSRC toggle device from recording sources
- *
- * @retval 0		success
- * @retval -1		failure
  */
 int
 mixer_modrecsrc(struct mixer *m, int opt)
@@ -326,9 +301,6 @@ mixer_modrecsrc(struct mixer *m, int opt)
 /*
  * Get default audio card's number. This is used to open the default mixer
  * and set the mixer structure's `f_default` flag.
- *
- * @retval unit		success
- * @retval -1		failure
  */
 int
 mixer_getdunit(void)
@@ -349,9 +321,6 @@ mixer_getdunit(void)
  * the sysctl API.
  * 
  * @param unit		the audio card number (e.g pcm0, pcm1, ...).
- *
- * @retval 0		success
- * @retval -1		failure
  */
 int
 mixer_setdunit(struct mixer *m, int unit)
@@ -368,9 +337,6 @@ mixer_setdunit(struct mixer *m, int unit)
 
 /*
  * Get the total number of mixers in the system.
- *
- * @retval nmixers	success
- * @retval -1		failure
  */
 int
 mixer_getnmixers(void)

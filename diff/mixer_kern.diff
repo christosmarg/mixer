@@ -1,31 +1,5 @@
-commit 183292e718629ceaffd37e506b226c0f65ac0e43
-Author: Hans Petter Selasky <hselasky@FreeBSD.org>
-Date:   Tue Jul 20 19:02:41 2021 +0200
-
-    Implement the SOUND_MIXER_WRITE_MUTE and SOUND_MIXER_READ_MUTE ioctl(9).
-    
-    These two ioctls are not part of the current version of OSS and were
-    considered obsolete. However, their behaviour is not the same as their
-    old one, so this implementation is specific to FreeBSD.
-    
-    Older OSS versions had the MUTE ioctls take and return an integer with
-    a value of 0 or 1, which meant that the _whole_ mixer is unmuted or
-    muted respectively. In my implementation, the ioctl takes and returns
-    a bitmask that tells us which devices are muted.
-    
-    This allows us to (un)mute only the devices we want, instead of the
-    whole mixer. The bitmask works the same way as in DEVMASK, RECMASK and
-    RECSRC.
-    
-    Integrated the hardware volume feature with the new mute system.
-    
-    Submitted by:   Christos Margiolis <christos@freebsd.org>
-    Differential Revision:  https://reviews.freebsd.org/D31130
-    MFC after:      1 week
-    Sponsored by:   NVIDIA Networking
-
 diff --git a/sys/dev/sound/pcm/mixer.c b/sys/dev/sound/pcm/mixer.c
-index 09b0bb8ab14..89e78b036e9 100644
+index 92c5f3d613e..8275d1a2684 100644
 --- a/sys/dev/sound/pcm/mixer.c
 +++ b/sys/dev/sound/pcm/mixer.c
 @@ -51,16 +51,16 @@ struct snd_mixer {
@@ -115,7 +89,7 @@ index 09b0bb8ab14..89e78b036e9 100644
  		}
  	}
  
-@@ -326,16 +331,42 @@ mixer_set(struct snd_mixer *m, u_int dev, u_int lev)
+@@ -326,16 +331,43 @@ mixer_set(struct snd_mixer *m, u_int dev, u_int lev)
  	m->level[dev] = l | (r << 8);
  	m->modify_counter++;
  
@@ -143,6 +117,7 @@ index 09b0bb8ab14..89e78b036e9 100644
 +void
 +mix_setmutedevs(struct snd_mixer *mixer, u_int32_t mutedevs)
 +{
++	int i;
 +	u_int32_t delta;
 +
 +	/* Filter out invalid values. */
@@ -163,7 +138,7 @@ index 09b0bb8ab14..89e78b036e9 100644
  }
  
  static int
-@@ -598,6 +629,12 @@ mix_getdevs(struct snd_mixer *m)
+@@ -598,6 +630,12 @@ mix_getdevs(struct snd_mixer *m)
  	return m->devs;
  }
  
@@ -176,7 +151,7 @@ index 09b0bb8ab14..89e78b036e9 100644
  u_int32_t
  mix_getrecdevs(struct snd_mixer *m)
  {
-@@ -721,7 +758,7 @@ mixer_init(device_t dev, kobj_class_t cls, void *devinfo)
+@@ -721,7 +759,7 @@ mixer_init(device_t dev, kobj_class_t cls, void *devinfo)
  			}
  		}
  
@@ -185,7 +160,7 @@ index 09b0bb8ab14..89e78b036e9 100644
  	}
  
  	mixer_setrecsrc(m, 0); /* Set default input. */
-@@ -799,7 +836,7 @@ mixer_uninit(device_t dev)
+@@ -799,7 +837,7 @@ mixer_uninit(device_t dev)
  	snd_mtxlock(m->lock);
  
  	for (i = 0; i < SOUND_MIXER_NRDEVICES; i++)
@@ -194,7 +169,7 @@ index 09b0bb8ab14..89e78b036e9 100644
  
  	mixer_setrecsrc(m, SOUND_MASK_MIC);
  
-@@ -836,8 +873,12 @@ mixer_reinit(device_t dev)
+@@ -836,8 +874,12 @@ mixer_reinit(device_t dev)
  		return i;
  	}
  
@@ -209,7 +184,7 @@ index 09b0bb8ab14..89e78b036e9 100644
  
  	mixer_setrecsrc(m, m->recsrc);
  	snd_mtxunlock(m->lock);
-@@ -863,10 +904,8 @@ sysctl_hw_snd_hwvol_mixer(SYSCTL_HANDLER_ARGS)
+@@ -863,10 +905,8 @@ sysctl_hw_snd_hwvol_mixer(SYSCTL_HANDLER_ARGS)
  		if (dev == -1) {
  			snd_mtxunlock(m->lock);
  			return EINVAL;
@@ -221,7 +196,7 @@ index 09b0bb8ab14..89e78b036e9 100644
  		}
  	}
  	snd_mtxunlock(m->lock);
-@@ -897,14 +936,7 @@ mixer_hwvol_init(device_t dev)
+@@ -897,14 +937,7 @@ mixer_hwvol_init(device_t dev)
  void
  mixer_hwvol_mute_locked(struct snd_mixer *m)
  {
@@ -237,7 +212,7 @@ index 09b0bb8ab14..89e78b036e9 100644
  }
  
  void
-@@ -925,11 +957,8 @@ mixer_hwvol_step_locked(struct snd_mixer *m, int left_step, int right_step)
+@@ -925,11 +958,8 @@ mixer_hwvol_step_locked(struct snd_mixer *m, int left_step, int right_step)
  {
  	int level, left, right;
  
@@ -251,7 +226,7 @@ index 09b0bb8ab14..89e78b036e9 100644
  	if (level != -1) {
  		left = level & 0xff;
  		right = (level >> 8) & 0xff;
-@@ -943,7 +972,8 @@ mixer_hwvol_step_locked(struct snd_mixer *m, int left_step, int right_step)
+@@ -943,7 +973,8 @@ mixer_hwvol_step_locked(struct snd_mixer *m, int left_step, int right_step)
  			right = 0;
  		else if (right > 100)
  			right = 100;
@@ -261,7 +236,7 @@ index 09b0bb8ab14..89e78b036e9 100644
  	}
  }
  
-@@ -976,7 +1006,7 @@ mix_set(struct snd_mixer *m, u_int dev, u_int left, u_int right)
+@@ -976,7 +1007,7 @@ mix_set(struct snd_mixer *m, u_int dev, u_int left, u_int right)
  	KASSERT(m != NULL, ("NULL snd_mixer"));
  
  	snd_mtxlock(m->lock);
@@ -270,7 +245,7 @@ index 09b0bb8ab14..89e78b036e9 100644
  	snd_mtxunlock(m->lock);
  
  	return ((ret != 0) ? ENXIO : 0);
-@@ -1304,10 +1334,18 @@ mixer_ioctl_cmd(struct cdev *i_dev, u_long cmd, caddr_t arg, int mode,
+@@ -1305,10 +1336,18 @@ mixer_ioctl_cmd(struct cdev *i_dev, u_long cmd, caddr_t arg, int mode,
  		goto done;
  	}
  	if ((cmd & ~0xff) == MIXER_WRITE(0)) {
@@ -292,7 +267,7 @@ index 09b0bb8ab14..89e78b036e9 100644
  		snd_mtxunlock(m->lock);
  		return ((ret == 0) ? 0 : ENXIO);
  	}
-@@ -1318,6 +1356,9 @@ mixer_ioctl_cmd(struct cdev *i_dev, u_long cmd, caddr_t arg, int mode,
+@@ -1319,6 +1358,9 @@ mixer_ioctl_cmd(struct cdev *i_dev, u_long cmd, caddr_t arg, int mode,
  		case SOUND_MIXER_STEREODEVS:
  			v = mix_getdevs(m);
  			break;
@@ -302,7 +277,7 @@ index 09b0bb8ab14..89e78b036e9 100644
  		case SOUND_MIXER_RECMASK:
  			v = mix_getrecdevs(m);
  			break;
-@@ -1326,6 +1367,7 @@ mixer_ioctl_cmd(struct cdev *i_dev, u_long cmd, caddr_t arg, int mode,
+@@ -1327,6 +1369,7 @@ mixer_ioctl_cmd(struct cdev *i_dev, u_long cmd, caddr_t arg, int mode,
  			break;
  		default:
  			v = mixer_get(m, j);
@@ -310,7 +285,7 @@ index 09b0bb8ab14..89e78b036e9 100644
  		}
  		*arg_i = v;
  		snd_mtxunlock(m->lock);
-@@ -1554,5 +1596,5 @@ mix_set_locked(struct snd_mixer *m, u_int dev, int left, int right)
+@@ -1555,5 +1598,5 @@ mix_set_locked(struct snd_mixer *m, u_int dev, int left, int right)
  
  	level = (left & 0xFF) | ((right & 0xFF) << 8);
  
@@ -332,3 +307,72 @@ index 8e11d553a3e..7857609b289 100644
  void mix_setparentchild(struct snd_mixer *m, u_int32_t parent, u_int32_t childs);
  void mix_setrealdev(struct snd_mixer *m, u_int32_t dev, u_int32_t realdev);
  u_int32_t mix_getparent(struct snd_mixer *m, u_int32_t dev);
+diff --git a/sys/dev/sound/pcm/sound.c b/sys/dev/sound/pcm/sound.c
+index b4be28aeff8..2638885d431 100644
+--- a/sys/dev/sound/pcm/sound.c
++++ b/sys/dev/sound/pcm/sound.c
+@@ -1012,12 +1012,28 @@ SYSCTL_PROC(_hw_snd, OID_AUTO, clone_gc, CTLTYPE_INT | CTLFLAG_RWTUN,
+     "global clone garbage collector");
+ #endif
+ 
++static u_int8_t
++pcm_status_init(struct snddev_info *d)
++{
++	u_int8_t status = PCM_STATUS_NONE;
++
++	if (d->playcount > 0)
++		status |= PCM_STATUS_PLAY;
++	if (d->reccount > 0)
++		status |= PCM_STATUS_REC;
++
++	return (status);
++}
++
+ static void
+ pcm_sysinit(device_t dev)
+ {
+   	struct snddev_info *d = device_get_softc(dev);
++	u_int8_t status;
++
++	status = pcm_status_init(d);
+ 
+-  	/* XXX: an user should be able to set this with a control tool, the
++	/* XXX: a user should be able to set this with a control tool, the
+ 	   sysadmin then needs min+max sysctls for this */
+ 	SYSCTL_ADD_UINT(device_get_sysctl_ctx(dev),
+ 	    SYSCTL_CHILDREN(device_get_sysctl_tree(dev)),
+@@ -1027,6 +1043,10 @@ pcm_sysinit(device_t dev)
+ 	    "bitperfect", CTLTYPE_INT | CTLFLAG_RWTUN, d, sizeof(d),
+ 	    sysctl_dev_pcm_bitperfect, "I",
+ 	    "bit-perfect playback/recording (0=disable, 1=enable)");
++	SYSCTL_ADD_UINT(device_get_sysctl_ctx(dev),
++	    SYSCTL_CHILDREN(device_get_sysctl_tree(dev)),
++	    OID_AUTO, "status", CTLFLAG_RD, NULL, status,
++	    "playback/recording status (0=none, 1=play, 2=rec, 3=play+rec)");
+ #ifdef SND_DEBUG
+ 	SYSCTL_ADD_PROC(device_get_sysctl_ctx(dev),
+ 	    SYSCTL_CHILDREN(device_get_sysctl_tree(dev)), OID_AUTO,
+@@ -1130,7 +1150,7 @@ pcm_register(device_t dev, void *devinfo, int numplay, int numrec)
+ 	sysctl_ctx_init(&d->rec_sysctl_ctx);
+ 	d->rec_sysctl_tree = SYSCTL_ADD_NODE(&d->rec_sysctl_ctx,
+ 	    SYSCTL_CHILDREN(device_get_sysctl_tree(dev)), OID_AUTO, "rec",
+-	    CTLFLAG_RD, 0, "record channels node");
++	    CTLFLAG_RD, 0, "recording channels node");
+ 
+ 	if (numplay > 0 || numrec > 0)
+ 		d->flags |= SD_F_AUTOVCHAN;
+diff --git a/sys/dev/sound/pcm/sound.h b/sys/dev/sound/pcm/sound.h
+index d4b3a23e8eb..c16555f830a 100644
+--- a/sys/dev/sound/pcm/sound.h
++++ b/sys/dev/sound/pcm/sound.h
+@@ -411,6 +411,10 @@ struct snddev_info {
+ void	sound_oss_sysinfo(oss_sysinfo *);
+ int	sound_oss_card_info(oss_card_info *);
+ 
++#define PCM_STATUS_NONE		0x00
++#define PCM_STATUS_PLAY		0x01
++#define PCM_STATUS_REC		0x02
++
+ #define PCM_LOCKOWNED(d)	mtx_owned((d)->lock)
+ #define	PCM_LOCK(d)		mtx_lock((d)->lock)
+ #define	PCM_UNLOCK(d)		mtx_unlock((d)->lock)

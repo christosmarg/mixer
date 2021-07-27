@@ -96,6 +96,7 @@ dunit:
 
 	m->devmask = m->recmask = m->recsrc = 0;
 	m->f_default = m->unit == mixer_getdunit();
+	m->status = mixer_getstatus(m->unit);
 	/* The unit number _must_ be set before the ioctl. */
 	m->mi.dev = m->unit;
 	m->ci.card = m->unit;
@@ -305,8 +306,8 @@ mixer_modrecsrc(struct mixer *m, int opt)
 int
 mixer_getdunit(void)
 {
-	int unit;
 	size_t size;
+	int unit;
 
 	size = sizeof(int);
 	if (sysctlbyname("hw.snd.default_unit", &unit, &size, NULL, 0) < 0)
@@ -333,6 +334,25 @@ mixer_setdunit(struct mixer *m, int unit)
 	m->f_default = m->unit == unit;
 
 	return (0);
+}
+
+/*
+ * Get sound device status (none, play, rec, play+rec). Userland programs can
+ * use the MIX_STATUS_* flags to determine the status of the device.
+ */
+int
+mixer_getstatus(int unit)
+{
+	char buf[BUFSIZ];
+	size_t size;
+	unsigned int status;
+
+	(void)snprintf(buf, sizeof(buf) - 1, "dev.pcm.%d.status", unit);
+	size = sizeof(unsigned int);
+	if (sysctlbyname(buf, &status, &size, NULL, 0) < 0)
+		return (-1);
+
+	return (status);
 }
 
 /*

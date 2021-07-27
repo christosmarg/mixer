@@ -75,6 +75,10 @@ struct mixer {
 #define MIX_TOGGLERECSRC	0x08
 	int recsrc;
 	int f_default;
+#define MIX_STATUS_NONE		0x00
+#define MIX_STATUS_PLAY		0x01
+#define MIX_STATUS_REC		0x02
+	int status;
 };
 
 typedef struct mix_volume mix_volume_t;
@@ -88,6 +92,7 @@ int mixer_setmute(struct mixer *, int);
 int mixer_modrecsrc(struct mixer *, int);
 int mixer_getdunit(void);
 int mixer_setdunit(struct mixer *, int);
+int mixer_getstatus(int);
 int mixer_getnmixers(void);
 
 __END_DECLS

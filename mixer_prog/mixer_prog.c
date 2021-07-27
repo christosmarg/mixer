@@ -205,13 +205,19 @@ printall(struct mixer *m, int oflag)
 	}
 }
 
-/* TODO: print play/rec */
 static void
 printminfo(struct mixer *m, int oflag)
 {
 	if (oflag)
 		return;
 	printf("%s: <%s> %s", m->mi.name, m->ci.longname, m->ci.hw_info);
+	/* TODO: clean up the mess */
+	if (m->status & MIX_STATUS_PLAY)
+		printf(" (play%s", m->status & MIX_STATUS_REC ? "" : ")");
+	if (m->status == (MIX_STATUS_PLAY | MIX_STATUS_REC))
+		printf("/");
+	if (m->status & MIX_STATUS_REC)
+		printf("%srec)", m->status & MIX_STATUS_PLAY ? "" : " (");
 	if (m->f_default)
 		printf(" (default)");
 	printf("\n");

@@ -74,7 +74,7 @@ struct mixer {
 #define MIX_SETRECSRC		0x04
 #define MIX_TOGGLERECSRC	0x08
 	int recsrc;
-	int f_default;
+	int f_default; /* TODO: combine with status? */
 #define MIX_STATUS_NONE		0x00
 #define MIX_STATUS_PLAY		0x01
 #define MIX_STATUS_REC		0x02

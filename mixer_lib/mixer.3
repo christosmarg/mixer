@@ -33,6 +33,7 @@
 .Nm mixer_modrecsrc ,
 .Nm mixer_getdunit ,
 .Nm mixer_setdunit ,
+.Nm mixer_getstatus ,
 .Nm mixer_getnmixers ,
 .Nm MIX_ISDEV ,
 .Nm MIX_ISMUTE ,
@@ -61,6 +62,8 @@ Mixer library (libmixer, -lmixer)
 .Fn mixer_getdunit "void"
 .Ft int
 .Fn mixer_setdunit "struct mixer *m" "int unit"
+.Ft int
+.Fn mixer_getstatus "int unit"
 .Ft int
 .Fn mixer_getnmixers "void"
 .Ft int
@@ -101,6 +104,10 @@ struct mixer {
 #define MIX_TOGGLERECSRC	0x08
 	int recsrc;
 	int f_default;
+#define MIX_STATUS_NONE		0x00
+#define MIX_STATUS_PLAY		0x01
+#define MIX_STATUS_REC		0x02
+	int status;
 };
 .Ed
 .Ss Mixer device
@@ -217,6 +224,21 @@ not really a mixer feature, it's useful to have instead of having to use
 the
 .Xr sysctl 3
 controls.
+.Pp
+The
+.Fn mixer_getstatus
+function returns the playback/recording status of the audio device the mixer
+belongs to. The available values are the following:
+.Bl -tag -width "MIX_STATUS_PLAY | MIX_STATUS_REC" -offset indent
+.It Dv MIX_STATUS_NONE
+Neither playback nor recording.
+.It Dv MIX_STATUS_PLAY
+Playback.
+.It Dv MIX_STATUS_REC
+Recording.
+.It Dv MIX_STATUS_PLAY | MIX_STATUS_REC
+Playback and recording.
+.El
 .Pp
 The
 .Fn mixer_getnmixers

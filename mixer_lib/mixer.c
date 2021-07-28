@@ -86,7 +86,7 @@ mixer_open(const char *name)
 		(void)strlcpy(m->name, name, sizeof(m->name));
 	} else {
 dunit:
-		if ((m->unit = mixer_getdunit()) < 0)
+		if ((m->unit = mixer_get_dunit()) < 0)
 			goto fail;
 		(void)snprintf(m->name, sizeof(m->name) - 1, "/dev/mixer%d", m->unit);
 	}
@@ -95,8 +95,8 @@ dunit:
 		goto fail;
 
 	m->devmask = m->recmask = m->recsrc = 0;
-	m->f_default = m->unit == mixer_getdunit();
-	m->status = mixer_getstatus(m->unit);
+	m->f_default = m->unit == mixer_get_dunit();
+	m->mode = mixer_get_mode(m->unit);
 	/* The unit number _must_ be set before the ioctl. */
 	m->mi.dev = m->unit;
 	m->ci.card = m->unit;
@@ -115,9 +115,11 @@ dunit:
 		if ((dp = calloc(1, sizeof(struct mix_dev))) == NULL)
 			goto fail;
 		dp->devno = i;
+		dp->nctl = 0;
 		if (_mixer_readvol(m, dp) < 0)
 			goto fail;
 		(void)strlcpy(dp->name, names[i], sizeof(dp->name));
+		TAILQ_INIT(&dp->ctls);
 		TAILQ_INSERT_TAIL(&m->devs, dp, devs);
 		m->ndev++;
 	}
@@ -140,12 +142,18 @@ int
 mixer_close(struct mixer *m)
 {
 	struct mix_dev *dp;
+	mix_ctl_t *cp;
 	int r;
 
 	r = close(m->fd);
 	while (!TAILQ_EMPTY(&m->devs)) {
 		dp = TAILQ_FIRST(&m->devs);
 		TAILQ_REMOVE(&m->devs, dp, devs);
+		while (!TAILQ_EMPTY(&dp->ctls)) {
+			cp = TAILQ_FIRST(&dp->ctls);
+			TAILQ_REMOVE(&dp->ctls, cp, ctls);
+			free(cp);
+		}
 		free(dp);
 	}
 	free(m);
@@ -162,7 +170,7 @@ mixer_close(struct mixer *m)
  * The caller must manually assign the return value to `m->dev`.
  */
 struct mix_dev *
-mixer_getdev(struct mixer *m, int dev)
+mixer_get_dev(struct mixer *m, int dev)
 {
 	struct mix_dev *dp;
 
@@ -185,13 +193,114 @@ mixer_getdev(struct mixer *m, int dev)
  * @param name		device name (e.g vol, pcm, ...)
  */
 struct mix_dev *
-mixer_getdevbyname(struct mixer *m, const char *name)
+mixer_get_dev_byname(struct mixer *m, const char *name)
 {
 	struct mix_dev *dp;
 
 	TAILQ_FOREACH(dp, &m->devs, devs) {
 		if (!strncmp(dp->name, name, sizeof(dp->name)))
 			return (dp);
+	}
+	errno = EINVAL;
+
+	return (NULL);
+}
+
+/*
+ * Make a mixer control.
+ */
+mix_ctl_t *
+mixer_make_ctl(int id, const char *name,
+    int (*mod)(struct mixer *m, void *p), int (*print)(struct mixer *m, void *p))
+{
+	mix_ctl_t *ctl;
+
+	if ((ctl = calloc(1, sizeof(mix_ctl_t))) == NULL)
+		return (NULL);
+	ctl->id = id;
+	if (name != NULL)
+		(void)strlcpy(ctl->name, name, sizeof(ctl->name));
+	ctl->mod = mod;
+	ctl->print = print;
+
+	return (ctl);
+}
+
+/*
+ * Add a mixer control to a device by passing all fields as arguments.
+ */
+int
+mixer_add_ctl(struct mix_dev *d, int id, const char *name,
+    int (*mod)(struct mixer *m, void *p), int (*print)(struct mixer *m, void *p))
+{
+	mix_ctl_t *ctl;
+
+	if ((ctl = mixer_make_ctl(id, name, mod, print)) == NULL)
+		return (-1);
+	
+	return (mixer_add_ctl_s(d, ctl));
+}
+
+/*
+ * Add a mixer control to a device.
+ */
+int
+mixer_add_ctl_s(struct mix_dev *d, mix_ctl_t *ctl)
+{
+	if (ctl == NULL || ctl->mod == NULL || ctl->print == NULL)
+		return (-1);
+	TAILQ_INSERT_TAIL(&d->ctls, ctl, ctls);
+	d->nctl++;
+
+	return (0);
+}
+
+/*
+ * Remove a mixer control from a device.
+ */
+int
+mixer_remove_ctl(struct mix_dev *d, mix_ctl_t *ctl)
+{
+	if (ctl == NULL) {
+		errno = EINVAL;
+		return (-1);
+	}
+	if (!TAILQ_EMPTY(&d->ctls)) {
+		TAILQ_REMOVE(&d->ctls, ctl, ctls);
+		free(ctl);
+	}
+
+	return (0);
+}
+
+/*
+ * Get a mixer control by id.
+ */
+mix_ctl_t *
+mixer_get_ctl(struct mix_dev *d, int id)
+{
+	mix_ctl_t *cp;
+
+	TAILQ_FOREACH(cp, &d->ctls, ctls) {
+		if (cp->id == id)
+			return (cp);
+	}
+	errno = EINVAL;
+
+	return (NULL);
+}
+
+/*
+ * Get a mixer control by name.
+ */
+mix_ctl_t *
+mixer_get_ctl_byname(struct mix_dev *d, const char *name)
+{
+	mix_ctl_t *cp;
+
+	TAILQ_FOREACH(cp, &d->ctls, ctls) {
+		if (!strncmp(cp->name, name, sizeof(cp->name)))
+			return (cp);
 	}
 	errno = EINVAL;
 
@@ -208,7 +317,7 @@ mixer_getdevbyname(struct mixer *m, const char *name)
  * Volume clumping should be done by the caller.
  */
 int
-mixer_setvol(struct mixer *m, mix_volume_t vol)
+mixer_set_vol(struct mixer *m, mix_volume_t vol)
 {
 	int v;
 
@@ -234,7 +343,7 @@ mixer_setvol(struct mixer *m, mix_volume_t vol)
  *			MIX_TOGGLEMUTE toggle device's mute
  */
 int
-mixer_setmute(struct mixer *m, int opt)
+mixer_set_mute(struct mixer *m, int opt)
 {
 	switch (opt) {
 	case MIX_MUTE:
@@ -268,7 +377,7 @@ mixer_setmute(struct mixer *m, int opt)
  *			MIX_TOGGLERECSRC toggle device from recording sources
  */
 int
-mixer_modrecsrc(struct mixer *m, int opt)
+mixer_mod_recsrc(struct mixer *m, int opt)
 {
 	if (!m->recmask || !MIX_ISREC(m, m->dev->devno)) {
 		errno = ENODEV;
@@ -304,7 +413,7 @@ mixer_modrecsrc(struct mixer *m, int opt)
  * and set the mixer structure's `f_default` flag.
  */
 int
-mixer_getdunit(void)
+mixer_get_dunit(void)
 {
 	size_t size;
 	int unit;
@@ -324,7 +433,7 @@ mixer_getdunit(void)
  * @param unit		the audio card number (e.g pcm0, pcm1, ...).
  */
 int
-mixer_setdunit(struct mixer *m, int unit)
+mixer_set_dunit(struct mixer *m, int unit)
 {
 	size_t size;
 
@@ -337,29 +446,29 @@ mixer_setdunit(struct mixer *m, int unit)
 }
 
 /*
- * Get sound device status (none, play, rec, play+rec). Userland programs can
- * use the MIX_STATUS_* flags to determine the status of the device.
+ * Get sound device mode (none, play, rec, play+rec). Userland programs can
+ * use the MIX_STATUS_* flags to determine the mode of the device.
  */
 int
-mixer_getstatus(int unit)
+mixer_get_mode(int unit)
 {
-	char buf[BUFSIZ];
+	char buf[64];
 	size_t size;
-	unsigned int status;
+	unsigned int mode;
 
-	(void)snprintf(buf, sizeof(buf) - 1, "dev.pcm.%d.status", unit);
+	(void)snprintf(buf, sizeof(buf) - 1, "dev.pcm.%d.mode", unit);
 	size = sizeof(unsigned int);
-	if (sysctlbyname(buf, &status, &size, NULL, 0) < 0)
+	if (sysctlbyname(buf, &mode, &size, NULL, 0) < 0)
 		return (-1);
 
-	return (status);
+	return (mode);
 }
 
 /*
  * Get the total number of mixers in the system.
  */
 int
-mixer_getnmixers(void)
+mixer_get_nmixers(void)
 {
 	struct mixer *m;
 	oss_sysinfo si;

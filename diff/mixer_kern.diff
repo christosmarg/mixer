@@ -308,51 +308,53 @@ index 8e11d553a3e..7857609b289 100644
  void mix_setrealdev(struct snd_mixer *m, u_int32_t dev, u_int32_t realdev);
  u_int32_t mix_getparent(struct snd_mixer *m, u_int32_t dev);
 diff --git a/sys/dev/sound/pcm/sound.c b/sys/dev/sound/pcm/sound.c
-index b4be28aeff8..2638885d431 100644
+index b4be28aeff8..e2014a70f9b 100644
 --- a/sys/dev/sound/pcm/sound.c
 +++ b/sys/dev/sound/pcm/sound.c
-@@ -1012,12 +1012,28 @@ SYSCTL_PROC(_hw_snd, OID_AUTO, clone_gc, CTLTYPE_INT | CTLFLAG_RWTUN,
+@@ -1012,12 +1012,30 @@ SYSCTL_PROC(_hw_snd, OID_AUTO, clone_gc, CTLTYPE_INT | CTLFLAG_RWTUN,
      "global clone garbage collector");
  #endif
  
 +static u_int8_t
-+pcm_status_init(struct snddev_info *d)
++pcm_mode_init(struct snddev_info *d)
 +{
-+	u_int8_t status = PCM_STATUS_NONE;
++	u_int8_t mode = 0;
 +
 +	if (d->playcount > 0)
-+		status |= PCM_STATUS_PLAY;
++		mode |= PCM_MODE_PLAY;
 +	if (d->reccount > 0)
-+		status |= PCM_STATUS_REC;
++		mode |= PCM_MODE_REC;
++	if (d->playcount == 0 && d->reccount == 0)
++		mode = PCM_MODE_NONE;
 +
-+	return (status);
++	return (mode);
 +}
 +
  static void
  pcm_sysinit(device_t dev)
  {
    	struct snddev_info *d = device_get_softc(dev);
-+	u_int8_t status;
++	u_int8_t mode;
 +
-+	status = pcm_status_init(d);
++	mode = pcm_mode_init(d);
  
 -  	/* XXX: an user should be able to set this with a control tool, the
 +	/* XXX: a user should be able to set this with a control tool, the
  	   sysadmin then needs min+max sysctls for this */
  	SYSCTL_ADD_UINT(device_get_sysctl_ctx(dev),
  	    SYSCTL_CHILDREN(device_get_sysctl_tree(dev)),
-@@ -1027,6 +1043,10 @@ pcm_sysinit(device_t dev)
+@@ -1027,6 +1045,10 @@ pcm_sysinit(device_t dev)
  	    "bitperfect", CTLTYPE_INT | CTLFLAG_RWTUN, d, sizeof(d),
  	    sysctl_dev_pcm_bitperfect, "I",
  	    "bit-perfect playback/recording (0=disable, 1=enable)");
 +	SYSCTL_ADD_UINT(device_get_sysctl_ctx(dev),
 +	    SYSCTL_CHILDREN(device_get_sysctl_tree(dev)),
-+	    OID_AUTO, "status", CTLFLAG_RD, NULL, status,
-+	    "playback/recording status (0=none, 1=play, 2=rec, 3=play+rec)");
++	    OID_AUTO, "mode", CTLFLAG_RD, NULL, mode,
++	    "mode (0=none, 1=play, 2=rec, 3=play+rec)");
  #ifdef SND_DEBUG
  	SYSCTL_ADD_PROC(device_get_sysctl_ctx(dev),
  	    SYSCTL_CHILDREN(device_get_sysctl_tree(dev)), OID_AUTO,
-@@ -1130,7 +1150,7 @@ pcm_register(device_t dev, void *devinfo, int numplay, int numrec)
+@@ -1130,7 +1152,7 @@ pcm_register(device_t dev, void *devinfo, int numplay, int numrec)
  	sysctl_ctx_init(&d->rec_sysctl_ctx);
  	d->rec_sysctl_tree = SYSCTL_ADD_NODE(&d->rec_sysctl_ctx,
  	    SYSCTL_CHILDREN(device_get_sysctl_tree(dev)), OID_AUTO, "rec",
@@ -362,16 +364,16 @@ index b4be28aeff8..2638885d431 100644
  	if (numplay > 0 || numrec > 0)
  		d->flags |= SD_F_AUTOVCHAN;
 diff --git a/sys/dev/sound/pcm/sound.h b/sys/dev/sound/pcm/sound.h
-index d4b3a23e8eb..c16555f830a 100644
+index d4b3a23e8eb..eda4012a517 100644
 --- a/sys/dev/sound/pcm/sound.h
 +++ b/sys/dev/sound/pcm/sound.h
 @@ -411,6 +411,10 @@ struct snddev_info {
  void	sound_oss_sysinfo(oss_sysinfo *);
  int	sound_oss_card_info(oss_card_info *);
  
-+#define PCM_STATUS_NONE		0x00
-+#define PCM_STATUS_PLAY		0x01
-+#define PCM_STATUS_REC		0x02
++#define PCM_MODE_NONE		0x01
++#define PCM_MODE_PLAY		0x02
++#define PCM_MODE_REC		0x04
 +
  #define PCM_LOCKOWNED(d)	mtx_owned((d)->lock)
  #define	PCM_LOCK(d)		mtx_lock((d)->lock)

@@ -40,6 +40,16 @@ __FBSDID("$FreeBSD$");
 #define MIX_ISREC(m,n)		MIX_ISSET(n, (m)->recmask)
 #define MIX_ISRECSRC(m,n)	MIX_ISSET(n, (m)->recsrc)
 
+struct mixer;
+
+typedef struct mix_ctl {
+	int id;
+	char name[NAME_MAX];
+	int (*mod)(struct mixer *, void *);
+	int (*print)(struct mixer *, void *);
+	TAILQ_ENTRY(mix_ctl) ctls;
+} mix_ctl_t;
+
 struct mix_dev {
 	char name[NAME_MAX];
 	int devno;
@@ -51,6 +61,8 @@ struct mix_dev {
 		float left;
 		float right;
 	} vol;
+	int nctl;
+	TAILQ_HEAD(, mix_ctl) ctls;
 	TAILQ_ENTRY(mix_dev) devs;
 };
 
@@ -74,26 +86,34 @@ struct mixer {
 #define MIX_SETRECSRC		0x04
 #define MIX_TOGGLERECSRC	0x08
 	int recsrc;
-	int f_default; /* TODO: combine with status? */
-#define MIX_STATUS_NONE		0x00
-#define MIX_STATUS_PLAY		0x01
-#define MIX_STATUS_REC		0x02
-	int status;
+	int f_default;
+#define MIX_MODE_NONE		0x01
+#define MIX_MODE_PLAY		0x02
+#define MIX_MODE_REC		0x04
+	int mode;
 };
 
 typedef struct mix_volume mix_volume_t;
 
 struct mixer *mixer_open(const char *);
 int mixer_close(struct mixer *);
-struct mix_dev *mixer_getdev(struct mixer *, int);
-struct mix_dev *mixer_getdevbyname(struct mixer *, const char *);
-int mixer_setvol(struct mixer *, mix_volume_t);
-int mixer_setmute(struct mixer *, int);
-int mixer_modrecsrc(struct mixer *, int);
-int mixer_getdunit(void);
-int mixer_setdunit(struct mixer *, int);
-int mixer_getstatus(int);
-int mixer_getnmixers(void);
+struct mix_dev *mixer_get_dev(struct mixer *, int);
+struct mix_dev *mixer_get_dev_byname(struct mixer *, const char *);
+mix_ctl_t *mixer_make_ctl(int, const char *,
+    int (*)(struct mixer *, void *), int (*)(struct mixer *, void *));
+int mixer_add_ctl(struct mix_dev *, int, const char *,
+    int (*)(struct mixer *, void *), int (*)(struct mixer *, void *));
+int mixer_add_ctl_s(struct mix_dev *, mix_ctl_t *);
+int mixer_remove_ctl(struct mix_dev *, mix_ctl_t *);
+mix_ctl_t *mixer_get_ctl(struct mix_dev *, int);
+mix_ctl_t *mixer_get_ctl_byname(struct mix_dev *, const char *);
+int mixer_set_vol(struct mixer *, mix_volume_t);
+int mixer_set_mute(struct mixer *, int);
+int mixer_mod_recsrc(struct mixer *, int);
+int mixer_get_dunit(void);
+int mixer_set_dunit(struct mixer *, int);
+int mixer_get_mode(int);
+int mixer_get_nmixers(void);
 
 __END_DECLS
 

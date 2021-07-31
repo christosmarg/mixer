@@ -47,65 +47,64 @@ struct mix_dev;
 typedef struct mix_ctl mix_ctl_t;
 typedef struct mix_volume mix_volume_t;
 
+/* User-defined controls */
 struct mix_ctl {
-	struct mix_dev *parent_dev;
-	int id;
-	char name[NAME_MAX];
-	int (*mod)(struct mix_dev *, void *);
-	int (*print)(struct mix_dev *, void *);
+	struct mix_dev *parent_dev;		/* parent device */
+	int id;					/* control id */
+	char name[NAME_MAX];			/* control name */
+	int (*mod)(struct mix_dev *, void *);	/* modify control values */
+	int (*print)(struct mix_dev *, void *);	/* print control */
 	TAILQ_ENTRY(mix_ctl) ctls;
 };
 
 struct mix_dev {
-	struct mixer *parent_mixer;
-	char name[NAME_MAX];
-	int devno;
+	struct mixer *parent_mixer;		/* parent mixer */
+	char name[NAME_MAX];			/* device name (e.g "vol") */
+	int devno;				/* device number */
 	struct mix_volume {
 #define MIX_VOLMIN		0.0f
 #define MIX_VOLMAX		1.0f
 #define MIX_VOLNORM(v)		((v) / 100.0f)
 #define MIX_VOLDENORM(v)	((int)roundf((v) * 100.0f))
-		float left;
-		float right;
+		float left;			/* left volume */
+		float right;			/* right volume */
 	} vol;
-	int nctl;
-	TAILQ_HEAD(, mix_ctl) ctls;
+	int nctl;				/* number of controls */
+	TAILQ_HEAD(, mix_ctl) ctls;		/* control list */
 	TAILQ_ENTRY(mix_dev) devs;
 };
 
 struct mixer {
-	TAILQ_HEAD(, mix_dev) devs;
-	struct mix_dev *dev;
-	oss_mixerinfo mi;
-	oss_card_info ci;
-	char name[NAME_MAX];
-	int fd;
-	int unit;
-	int ndev;
-	int devmask;
+	TAILQ_HEAD(, mix_dev) devs;		/* device list */
+	struct mix_dev *dev;			/* selected device */
+	oss_mixerinfo mi;			/* mixer info */
+	oss_card_info ci;			/* audio card info */
+	char name[NAME_MAX];			/* mixer name (e.g /dev/mixer0) */
+	int fd;					/* file descriptor */
+	int unit;				/* audio card unit */
+	int ndev;				/* number of devices */
+	int devmask;				/* valid devices */
 #define MIX_MUTE		0x01
 #define MIX_UNMUTE		0x02
 #define MIX_TOGGLEMUTE		0x04
-	int mutemask;
-	int recmask;
+	int mutemask;				/* muted devices */
+	int recmask;				/* recording devices */
 #define MIX_ADDRECSRC		0x01
 #define MIX_REMOVERECSRC	0x02
 #define MIX_SETRECSRC		0x04
 #define MIX_TOGGLERECSRC	0x08
-	int recsrc;
-	int f_default;
+	int recsrc;				/* recording sources */
+	int f_default;				/* default mixer flag */
 #define MIX_MODE_MIXER		0x01
 #define MIX_MODE_PLAY		0x02
 #define MIX_MODE_REC		0x04
-	int mode;
+	int mode;				/* dev.pcm.X.mode sysctl */
 };
 
 struct mixer *mixer_open(const char *);
 int mixer_close(struct mixer *);
 struct mix_dev *mixer_get_dev(struct mixer *, int);
 struct mix_dev *mixer_get_dev_byname(struct mixer *, const char *);
-mix_ctl_t *mixer_make_ctl(struct mix_dev *, int, const char *,
-    int (*)(struct mix_dev *, void *), int (*)(struct mix_dev *, void *));
 int mixer_add_ctl(struct mix_dev *, int, const char *,
     int (*)(struct mix_dev *, void *), int (*)(struct mix_dev *, void *));
 int mixer_add_ctl_s(mix_ctl_t *);

@@ -29,24 +29,28 @@
 
 #include <mixer.h>
 
-#define LEN(x) (sizeof(x) / sizeof(x[0]))
-
-static void	usage(void) __dead2;
-static void	initctls(struct mixer *);
-static void	printall(struct mixer *, int);
-static void	printminfo(struct mixer *, int);
-static void	printdev(struct mixer *, int);
-static void	printrecsrc(struct mixer *, int); /* XXX: change name */
+static void usage(void) __dead2;
+static void initctls(struct mixer *);
+static void printall(struct mixer *, int);
+static void printminfo(struct mixer *, int);
+static void printdev(struct mixer *, int);
+static void printrecsrc(struct mixer *, int); /* XXX: change name */
 /* Control handlers */
-static int	mod_dunit(struct mix_dev *, void *);
-static int	mod_volume(struct mix_dev *, void *);
-static int	mod_mute(struct mix_dev *, void *);
-static int	mod_recsrc(struct mix_dev *, void *);
-static int	print_volume(struct mix_dev *, void *);
-static int	print_mute(struct mix_dev *, void *);
-static int	print_recsrc(struct mix_dev *, void *);
+static int mod_dunit(struct mix_dev *, void *);
+static int mod_volume(struct mix_dev *, void *);
+static int mod_mute(struct mix_dev *, void *);
+static int mod_recsrc(struct mix_dev *, void *);
+static int print_volume(struct mix_dev *, void *);
+static int print_mute(struct mix_dev *, void *);
+static int print_recsrc(struct mix_dev *, void *);
 
-static mix_ctl_t *ctl_dunit;
+static const mix_ctl_t ctl_dunit = {
+	.parent_dev	= NULL,
+	.id		= -1,
+	.name		= "default_unit",
+	.mod		= mod_dunit,
+	.print		= NULL
+};
 
 int
 main(int argc, char *argv[])
@@ -113,7 +117,7 @@ main(int argc, char *argv[])
 
 	initctls(m);
 
-	if (dflag && ctl_dunit->mod(ctl_dunit->parent_dev, &dunit) < 0)
+	if (dflag && ctl_dunit.mod(m->dev, &dunit) < 0)
 		goto parse;
 	if (sflag) {
 		printrecsrc(m, oflag);
@@ -187,7 +191,6 @@ initctls(struct mixer *m)
 		(void)mixer_add_ctl(dp, C_MUT, "mute", mod_mute, print_mute);
 		(void)mixer_add_ctl(dp, C_SRC, "recsrc", mod_recsrc, print_recsrc);
 	}
-	ctl_dunit = mixer_make_ctl(NULL, -1, "default_unit", mod_dunit, NULL);
 }
 
 static void
@@ -248,7 +251,6 @@ printdev(struct mixer *m, int oflag)
 	}
 }
 
-/* TODO: -o option .recsrc */
 static void
 printrecsrc(struct mixer *m, int oflag)
 {
@@ -257,14 +259,15 @@ printrecsrc(struct mixer *m, int oflag)
 
 	if (!m->recmask)
 		return;
-	printminfo(m, oflag);
 	if (!oflag)
-		printf("    recording source(s): ");
+		printf("%s: ", m->mi.name);
 	TAILQ_FOREACH(dp, &m->devs, devs) {
 		if (MIX_ISRECSRC(m, dp->devno)) {
-			if (n++)
-				printf("%s ", oflag ? " " : ", ");
+			if (n++ && !oflag)
+				printf(", ");
 			printf("%s", dp->name);
+			if (oflag)
+				printf(".recsrc=+%s", n ? " " : "");
 		}
 	}
 	printf("\n");
@@ -284,7 +287,7 @@ mod_dunit(struct mix_dev *d, void *p)
 		warn("cannot set default unit to: %d", dunit);
 		return (-1);
 	}
-	printf("%s: %d -> %d\n", ctl_dunit->name, n, dunit);
+	printf("%s: %d -> %d\n", ctl_dunit.name, n, dunit);
 
 	return (0);
 }

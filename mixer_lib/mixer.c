@@ -208,40 +208,23 @@ mixer_get_dev_byname(struct mixer *m, const char *name)
 }
 
 /*
- * Make a mixer control.
+ * Add a mixer control to a device by passing all fields as arguments.
  */
-mix_ctl_t *
-mixer_make_ctl(struct mix_dev *parent_dev, int id, const char *name,
-    int (*mod)(struct mix_dev *d, void *p),
-    int (*print)(struct mix_dev *d, void *p))
+int
+mixer_add_ctl(struct mix_dev *parent_dev, int id, const char *name,
+    int (*mod)(struct mix_dev *, void *),
+    int (*print)(struct mix_dev *, void *))
 {
 	mix_ctl_t *ctl;
 
-	/* XXX: do not alloc? */
 	if ((ctl = calloc(1, sizeof(mix_ctl_t))) == NULL)
-		return (NULL);
+		return (-1);
 	ctl->parent_dev = parent_dev;
 	ctl->id = id;
 	if (name != NULL)
 		(void)strlcpy(ctl->name, name, sizeof(ctl->name));
 	ctl->mod = mod;
 	ctl->print = print;
-
-	return (ctl);
-}
-
-/*
- * Add a mixer control to a device by passing all fields as arguments.
- */
-int
-mixer_add_ctl(struct mix_dev *parent_dev, int id, const char *name,
-    int (*mod)(struct mix_dev *d, void *p),
-    int (*print)(struct mix_dev *d, void *p))
-{
-	mix_ctl_t *ctl;
-
-	if ((ctl = mixer_make_ctl(parent_dev, id, name, mod, print)) == NULL)
-		return (-1);
 	
 	return (mixer_add_ctl_s(ctl));
 }
@@ -449,6 +432,7 @@ mixer_set_dunit(struct mixer *m, int unit)
 	size = sizeof(int);
 	if (sysctlbyname("hw.snd.default_unit", NULL, 0, &unit, size) < 0)
 		return (-1);
+	/* XXX: how will other mixers get updated? */
 	m->f_default = m->unit == unit;
 
 	return (0);

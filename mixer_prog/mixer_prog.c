@@ -36,15 +36,15 @@ static void	initctls(struct mixer *);
 static void	printall(struct mixer *, int);
 static void	printminfo(struct mixer *, int);
 static void	printdev(struct mixer *, int);
-static void	printrecsrc(struct mixer *, int);
+static void	printrecsrc(struct mixer *, int); /* XXX: change name */
 /* Control handlers */
-static int	mod_dunit(struct mixer *, void *);
-static int	mod_volume(struct mixer *, void *);
-static int	mod_mute(struct mixer *, void *);
-static int	mod_recsrc(struct mixer *, void *);
-static int	print_volume(struct mixer *, void *);
-static int	print_mute(struct mixer *, void *);
-static int	print_recsrc(struct mixer *, void *);
+static int	mod_dunit(struct mix_dev *, void *);
+static int	mod_volume(struct mix_dev *, void *);
+static int	mod_mute(struct mix_dev *, void *);
+static int	mod_recsrc(struct mix_dev *, void *);
+static int	print_volume(struct mix_dev *, void *);
+static int	print_mute(struct mix_dev *, void *);
+static int	print_recsrc(struct mix_dev *, void *);
 
 static mix_ctl_t *ctl_dunit;
 
@@ -113,7 +113,7 @@ main(int argc, char *argv[])
 
 	initctls(m);
 
-	if (dflag && ctl_dunit->mod(m, &dunit) < 0)
+	if (dflag && ctl_dunit->mod(ctl_dunit->parent_dev, &dunit) < 0)
 		goto parse;
 	if (sflag) {
 		printrecsrc(m, oflag);
@@ -145,13 +145,13 @@ parse:
 
 		/* Input: `dev.control`. */
 		if (p == NULL) {
-			(void)cp->print(m, cp->name);
+			(void)cp->print(cp->parent_dev, cp->name);
 			pall = 0;
 			goto next;
 		}
 		valstr = p;
 		/* Input: `dev.control=val`. */
-		cp->mod(m, valstr);
+		cp->mod(cp->parent_dev, valstr);
 next:
 		free(p);
 		argc--;
@@ -187,8 +187,7 @@ initctls(struct mixer *m)
 		(void)mixer_add_ctl(dp, C_MUT, "mute", mod_mute, print_mute);
 		(void)mixer_add_ctl(dp, C_SRC, "recsrc", mod_recsrc, print_recsrc);
 	}
-	ctl_dunit = mixer_make_ctl(-1, "default_unit", mod_dunit, NULL);
-
+	ctl_dunit = mixer_make_ctl(NULL, -1, "default_unit", mod_dunit, NULL);
 }
 
 static void
@@ -206,19 +205,19 @@ printall(struct mixer *m, int oflag)
 static void
 printminfo(struct mixer *m, int oflag)
 {
+	int playrec = MIX_MODE_PLAY | MIX_MODE_REC;
+
 	if (oflag)
 		return;
 	printf("%s: <%s> %s", m->mi.name, m->ci.longname, m->ci.hw_info);
-	if (!(m->mode & MIX_MODE_NONE))
-		printf(" (");
+	printf(" (");
 	if (m->mode & MIX_MODE_PLAY)
 		printf("play");
-	if (m->mode == (MIX_MODE_PLAY | MIX_MODE_REC))
+	if ((m->mode & playrec) == playrec)
 		printf("/");
 	if (m->mode & MIX_MODE_REC)
 		printf("rec");
-	if (!(m->mode & MIX_MODE_NONE))
-		printf(")");
+	printf(")");
 	if (m->f_default)
 		printf(" (default)");
 	printf("\n");
@@ -244,11 +243,12 @@ printdev(struct mixer *m, int oflag)
 		printf("\n");
 	} else {
 		TAILQ_FOREACH(cp, &d->ctls, ctls) {
-			(void)cp->print(m, cp->name);
+			(void)cp->print(cp->parent_dev, cp->name);
 		}
 	}
 }
 
+/* TODO: -o option .recsrc */
 static void
 printrecsrc(struct mixer *m, int oflag)
 {
@@ -271,7 +271,7 @@ printrecsrc(struct mixer *m, int oflag)
 }
 
 static int
-mod_dunit(struct mixer *m, void *p)
+mod_dunit(struct mix_dev *d, void *p)
 {
 	int dunit = *((int *)p);
 	int n;
@@ -280,7 +280,7 @@ mod_dunit(struct mixer *m, void *p)
 		warn("cannot get default unit");
 		return (-1);
 	}
-	if (mixer_set_dunit(m, dunit) < 0) {
+	if (mixer_set_dunit(d->parent_mixer, dunit) < 0) {
 		warn("cannot set default unit to: %d", dunit);
 		return (-1);
 	}
@@ -290,8 +290,9 @@ mod_dunit(struct mixer *m, void *p)
 }
 
 static int
-mod_volume(struct mixer *m, void *p)
+mod_volume(struct mix_dev *d, void *p)
 {
+	struct mixer *m;
 	mix_ctl_t *cp;
 	mix_volume_t v;
 	const char *val;
@@ -299,6 +300,7 @@ mod_volume(struct mixer *m, void *p)
 	float lprev, rprev, lrel, rrel;
 	int n;
 
+	m = d->parent_mixer;
 	cp = mixer_get_ctl(m->dev, C_VOL);
 	val = p;
 	n = sscanf(val, "%7[^:]:%7s", lstr, rstr);
@@ -349,12 +351,14 @@ mod_volume(struct mixer *m, void *p)
 }
 
 static int
-mod_mute(struct mixer *m, void *p)
+mod_mute(struct mix_dev *d, void *p)
 {
+	struct mixer *m;
 	mix_ctl_t *cp;
 	const char *val;
 	int n, opt = -1;
 
+	m = d->parent_mixer;
 	cp = mixer_get_ctl(m->dev, C_MUT);
 	val = p;
 	switch (*val) {
@@ -382,12 +386,14 @@ mod_mute(struct mixer *m, void *p)
 }
 
 static int
-mod_recsrc(struct mixer *m, void *p)
+mod_recsrc(struct mix_dev *d, void *p)
 {
+	struct mixer *m;
 	mix_ctl_t *cp;
 	const char *val;
 	int n, opt = -1;
 
+	m = d->parent_mixer;
 	cp = mixer_get_ctl(m->dev, C_SRC);
 	val = p;
 	switch (*val) {
@@ -418,8 +424,9 @@ mod_recsrc(struct mixer *m, void *p)
 }
 
 static int
-print_volume(struct mixer *m, void *p)
+print_volume(struct mix_dev *d, void *p)
 {
+	struct mixer *m = d->parent_mixer;
 	const char *ctl_name = p;
 
 	printf("%s.%s=%.2f:%.2f\n", 
@@ -429,8 +436,9 @@ print_volume(struct mixer *m, void *p)
 }
 
 static int
-print_mute(struct mixer *m, void *p)
+print_mute(struct mix_dev *d, void *p)
 {
+	struct mixer *m = d->parent_mixer;
 	const char *ctl_name = p;
 
 	printf("%s.%s=%d\n", m->dev->name, ctl_name, MIX_ISMUTE(m, m->dev->devno));
@@ -439,8 +447,9 @@ print_mute(struct mixer *m, void *p)
 }
 
 static int
-print_recsrc(struct mixer *m, void *p)
+print_recsrc(struct mix_dev *d, void *p)
 {
+	struct mixer *m = d->parent_mixer;
 	const char *ctl_name = p;
 
 	if (!MIX_ISRECSRC(m, m->dev->devno))

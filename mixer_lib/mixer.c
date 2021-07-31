@@ -114,6 +114,7 @@ dunit:
 			continue;
 		if ((dp = calloc(1, sizeof(struct mix_dev))) == NULL)
 			goto fail;
+		dp->parent_mixer = m;
 		dp->devno = i;
 		dp->nctl = 0;
 		if (_mixer_readvol(m, dp) < 0)
@@ -210,13 +211,16 @@ mixer_get_dev_byname(struct mixer *m, const char *name)
  * Make a mixer control.
  */
 mix_ctl_t *
-mixer_make_ctl(int id, const char *name,
-    int (*mod)(struct mixer *m, void *p), int (*print)(struct mixer *m, void *p))
+mixer_make_ctl(struct mix_dev *parent_dev, int id, const char *name,
+    int (*mod)(struct mix_dev *d, void *p),
+    int (*print)(struct mix_dev *d, void *p))
 {
 	mix_ctl_t *ctl;
 
+	/* XXX: do not alloc? */
 	if ((ctl = calloc(1, sizeof(mix_ctl_t))) == NULL)
 		return (NULL);
+	ctl->parent_dev = parent_dev;
 	ctl->id = id;
 	if (name != NULL)
 		(void)strlcpy(ctl->name, name, sizeof(ctl->name));
@@ -230,27 +234,30 @@ mixer_make_ctl(int id, const char *name,
  * Add a mixer control to a device by passing all fields as arguments.
  */
 int
-mixer_add_ctl(struct mix_dev *d, int id, const char *name,
-    int (*mod)(struct mixer *m, void *p), int (*print)(struct mixer *m, void *p))
+mixer_add_ctl(struct mix_dev *parent_dev, int id, const char *name,
+    int (*mod)(struct mix_dev *d, void *p),
+    int (*print)(struct mix_dev *d, void *p))
 {
 	mix_ctl_t *ctl;
 
-	if ((ctl = mixer_make_ctl(id, name, mod, print)) == NULL)
+	if ((ctl = mixer_make_ctl(parent_dev, id, name, mod, print)) == NULL)
 		return (-1);
 	
-	return (mixer_add_ctl_s(d, ctl));
+	return (mixer_add_ctl_s(ctl));
 }
 
 /*
  * Add a mixer control to a device.
  */
 int
-mixer_add_ctl_s(struct mix_dev *d, mix_ctl_t *ctl)
+mixer_add_ctl_s(mix_ctl_t *ctl)
 {
-	if (ctl == NULL || ctl->mod == NULL || ctl->print == NULL)
+	struct mix_dev *p = ctl->parent_dev;
+
+	if (ctl == NULL || p == NULL || ctl->mod == NULL || ctl->print == NULL)
 		return (-1);
-	TAILQ_INSERT_TAIL(&d->ctls, ctl, ctls);
-	d->nctl++;
+	TAILQ_INSERT_TAIL(&p->ctls, ctl, ctls);
+	p->nctl++;
 
 	return (0);
 }
@@ -259,14 +266,16 @@ mixer_add_ctl_s(struct mix_dev *d, mix_ctl_t *ctl)
  * Remove a mixer control from a device.
  */
 int
-mixer_remove_ctl(struct mix_dev *d, mix_ctl_t *ctl)
+mixer_remove_ctl(mix_ctl_t *ctl)
 {
+	struct mix_dev *p = ctl->parent_dev;
+
 	if (ctl == NULL) {
 		errno = EINVAL;
 		return (-1);
 	}
-	if (!TAILQ_EMPTY(&d->ctls)) {
-		TAILQ_REMOVE(&d->ctls, ctl, ctls);
+	if (!TAILQ_EMPTY(&p->ctls)) {
+		TAILQ_REMOVE(&p->ctls, ctl, ctls);
 		free(ctl);
 	}
 

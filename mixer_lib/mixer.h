@@ -40,17 +40,24 @@ __FBSDID("$FreeBSD$");
 #define MIX_ISREC(m,n)		MIX_ISSET(n, (m)->recmask)
 #define MIX_ISRECSRC(m,n)	MIX_ISSET(n, (m)->recsrc)
 
+/* Forward declarations */
 struct mixer;
+struct mix_dev;
 
-typedef struct mix_ctl {
+typedef struct mix_ctl mix_ctl_t;
+typedef struct mix_volume mix_volume_t;
+
+struct mix_ctl {
+	struct mix_dev *parent_dev;
 	int id;
 	char name[NAME_MAX];
-	int (*mod)(struct mixer *, void *);
-	int (*print)(struct mixer *, void *);
+	int (*mod)(struct mix_dev *, void *);
+	int (*print)(struct mix_dev *, void *);
 	TAILQ_ENTRY(mix_ctl) ctls;
-} mix_ctl_t;
+};
 
 struct mix_dev {
+	struct mixer *parent_mixer;
 	char name[NAME_MAX];
 	int devno;
 	struct mix_volume {
@@ -87,24 +94,22 @@ struct mixer {
 #define MIX_TOGGLERECSRC	0x08
 	int recsrc;
 	int f_default;
-#define MIX_MODE_NONE		0x01
+#define MIX_MODE_MIXER		0x01
 #define MIX_MODE_PLAY		0x02
 #define MIX_MODE_REC		0x04
 	int mode;
 };
 
-typedef struct mix_volume mix_volume_t;
-
 struct mixer *mixer_open(const char *);
 int mixer_close(struct mixer *);
 struct mix_dev *mixer_get_dev(struct mixer *, int);
 struct mix_dev *mixer_get_dev_byname(struct mixer *, const char *);
-mix_ctl_t *mixer_make_ctl(int, const char *,
-    int (*)(struct mixer *, void *), int (*)(struct mixer *, void *));
+mix_ctl_t *mixer_make_ctl(struct mix_dev *, int, const char *,
+    int (*)(struct mix_dev *, void *), int (*)(struct mix_dev *, void *));
 int mixer_add_ctl(struct mix_dev *, int, const char *,
-    int (*)(struct mixer *, void *), int (*)(struct mixer *, void *));
-int mixer_add_ctl_s(struct mix_dev *, mix_ctl_t *);
-int mixer_remove_ctl(struct mix_dev *, mix_ctl_t *);
+    int (*)(struct mix_dev *, void *), int (*)(struct mix_dev *, void *));
+int mixer_add_ctl_s(mix_ctl_t *);
+int mixer_remove_ctl(mix_ctl_t *);
 mix_ctl_t *mixer_get_ctl(struct mix_dev *, int);
 mix_ctl_t *mixer_get_ctl_byname(struct mix_dev *, const char *);
 int mixer_set_vol(struct mixer *, mix_volume_t);

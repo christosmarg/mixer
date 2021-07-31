@@ -308,7 +308,7 @@ index 8e11d553a3e..7857609b289 100644
  void mix_setrealdev(struct snd_mixer *m, u_int32_t dev, u_int32_t realdev);
  u_int32_t mix_getparent(struct snd_mixer *m, u_int32_t dev);
 diff --git a/sys/dev/sound/pcm/sound.c b/sys/dev/sound/pcm/sound.c
-index b4be28aeff8..e2014a70f9b 100644
+index b4be28aeff8..6b1b8bcbc93 100644
 --- a/sys/dev/sound/pcm/sound.c
 +++ b/sys/dev/sound/pcm/sound.c
 @@ -1012,12 +1012,30 @@ SYSCTL_PROC(_hw_snd, OID_AUTO, clone_gc, CTLTYPE_INT | CTLFLAG_RWTUN,
@@ -324,8 +324,8 @@ index b4be28aeff8..e2014a70f9b 100644
 +		mode |= PCM_MODE_PLAY;
 +	if (d->reccount > 0)
 +		mode |= PCM_MODE_REC;
-+	if (d->playcount == 0 && d->reccount == 0)
-+		mode = PCM_MODE_NONE;
++	if (d->mixer_dev != NULL)
++		mode |= PCM_MODE_MIXER;
 +
 +	return (mode);
 +}
@@ -343,18 +343,19 @@ index b4be28aeff8..e2014a70f9b 100644
  	   sysadmin then needs min+max sysctls for this */
  	SYSCTL_ADD_UINT(device_get_sysctl_ctx(dev),
  	    SYSCTL_CHILDREN(device_get_sysctl_tree(dev)),
-@@ -1027,6 +1045,10 @@ pcm_sysinit(device_t dev)
+@@ -1027,6 +1045,11 @@ pcm_sysinit(device_t dev)
  	    "bitperfect", CTLTYPE_INT | CTLFLAG_RWTUN, d, sizeof(d),
  	    sysctl_dev_pcm_bitperfect, "I",
  	    "bit-perfect playback/recording (0=disable, 1=enable)");
 +	SYSCTL_ADD_UINT(device_get_sysctl_ctx(dev),
 +	    SYSCTL_CHILDREN(device_get_sysctl_tree(dev)),
 +	    OID_AUTO, "mode", CTLFLAG_RD, NULL, mode,
-+	    "mode (0=none, 1=play, 2=rec, 3=play+rec)");
++	    "mode (1=mixer, 2=play, 4=rec. The values are OR'ed if more than one"
++	    "mode is supported)");
  #ifdef SND_DEBUG
  	SYSCTL_ADD_PROC(device_get_sysctl_ctx(dev),
  	    SYSCTL_CHILDREN(device_get_sysctl_tree(dev)), OID_AUTO,
-@@ -1130,7 +1152,7 @@ pcm_register(device_t dev, void *devinfo, int numplay, int numrec)
+@@ -1130,7 +1153,7 @@ pcm_register(device_t dev, void *devinfo, int numplay, int numrec)
  	sysctl_ctx_init(&d->rec_sysctl_ctx);
  	d->rec_sysctl_tree = SYSCTL_ADD_NODE(&d->rec_sysctl_ctx,
  	    SYSCTL_CHILDREN(device_get_sysctl_tree(dev)), OID_AUTO, "rec",
@@ -364,14 +365,14 @@ index b4be28aeff8..e2014a70f9b 100644
  	if (numplay > 0 || numrec > 0)
  		d->flags |= SD_F_AUTOVCHAN;
 diff --git a/sys/dev/sound/pcm/sound.h b/sys/dev/sound/pcm/sound.h
-index d4b3a23e8eb..eda4012a517 100644
+index d4b3a23e8eb..e9979cf426c 100644
 --- a/sys/dev/sound/pcm/sound.h
 +++ b/sys/dev/sound/pcm/sound.h
 @@ -411,6 +411,10 @@ struct snddev_info {
  void	sound_oss_sysinfo(oss_sysinfo *);
  int	sound_oss_card_info(oss_card_info *);
  
-+#define PCM_MODE_NONE		0x01
++#define PCM_MODE_MIXER		0x01
 +#define PCM_MODE_PLAY		0x02
 +#define PCM_MODE_REC		0x04
 +

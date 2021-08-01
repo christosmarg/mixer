@@ -143,18 +143,14 @@ int
 mixer_close(struct mixer *m)
 {
 	struct mix_dev *dp;
-	mix_ctl_t *cp;
 	int r;
 
 	r = close(m->fd);
 	while (!TAILQ_EMPTY(&m->devs)) {
 		dp = TAILQ_FIRST(&m->devs);
 		TAILQ_REMOVE(&m->devs, dp, devs);
-		while (!TAILQ_EMPTY(&dp->ctls)) {
-			cp = TAILQ_FIRST(&dp->ctls);
-			TAILQ_REMOVE(&dp->ctls, cp, ctls);
-			free(cp);
-		}
+		while (!TAILQ_EMPTY(&dp->ctls))
+			(void)mixer_remove_ctl(TAILQ_FIRST(&dp->ctls));
 		free(dp);
 	}
 	free(m);
@@ -215,7 +211,8 @@ mixer_add_ctl(struct mix_dev *parent_dev, int id, const char *name,
     int (*mod)(struct mix_dev *, void *),
     int (*print)(struct mix_dev *, void *))
 {
-	mix_ctl_t *ctl;
+	struct mix_dev *dp;
+	mix_ctl_t *ctl, *cp;
 
 	/* XXX: should we accept NULL name? */
 	if (parent_dev == NULL) {
@@ -230,8 +227,19 @@ mixer_add_ctl(struct mix_dev *parent_dev, int id, const char *name,
 		(void)strlcpy(ctl->name, name, sizeof(ctl->name));
 	ctl->mod = mod;
 	ctl->print = print;
-	TAILQ_INSERT_TAIL(&parent_dev->ctls, ctl, ctls);
-	parent_dev->nctl++;
+	dp = ctl->parent_dev;
+	/* Make sure the same ID or name already exists. */
+	if (!TAILQ_EMPTY(&dp->ctls)) {
+		TAILQ_FOREACH(cp, &dp->ctls, ctls) {
+			if (!strncmp(cp->name, name, sizeof(cp->name)) ||
+			    cp->id == id) {
+				errno = EINVAL;
+				return (-1);
+			}
+		}
+	}
+	TAILQ_INSERT_TAIL(&dp->ctls, ctl, ctls);
+	dp->nctl++;
 	
 	return (0);
 }

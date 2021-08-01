@@ -83,7 +83,7 @@ struct mixer {
 	int fd;					/* file descriptor */
 	int unit;				/* audio card unit */
 	int ndev;				/* number of devices */
-	int devmask;				/* valid devices */
+	int devmask;				/* supported devices */
 #define MIX_MUTE		0x01
 #define MIX_UNMUTE		0x02
 #define MIX_TOGGLEMUTE		0x04
@@ -94,11 +94,11 @@ struct mixer {
 #define MIX_SETRECSRC		0x04
 #define MIX_TOGGLERECSRC	0x08
 	int recsrc;				/* recording sources */
-	int f_default;				/* default mixer flag */
 #define MIX_MODE_MIXER		0x01
 #define MIX_MODE_PLAY		0x02
 #define MIX_MODE_REC		0x04
 	int mode;				/* dev.pcm.X.mode sysctl */
+	int f_default;				/* default mixer flag */
 };
 
 struct mixer *mixer_open(const char *);

@@ -267,7 +267,9 @@ printrecsrc(struct mixer *m, int oflag)
 				printf(", ");
 			printf("%s", dp->name);
 			if (oflag)
-				printf(".recsrc=+%s", n ? " " : "");
+				printf(".%s=+%s",
+				    mixer_get_ctl(dp, C_SRC)->name,
+				    n ? " " : "");
 		}
 	}
 	printf("\n");

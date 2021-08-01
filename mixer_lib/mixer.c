@@ -208,7 +208,7 @@ mixer_get_dev_byname(struct mixer *m, const char *name)
 }
 
 /*
- * Add a mixer control to a device by passing all fields as arguments.
+ * Add a mixer control to a device.
  */
 int
 mixer_add_ctl(struct mix_dev *parent_dev, int id, const char *name,
@@ -217,6 +217,11 @@ mixer_add_ctl(struct mix_dev *parent_dev, int id, const char *name,
 {
 	mix_ctl_t *ctl;
 
+	/* XXX: should we accept NULL name? */
+	if (parent_dev == NULL) {
+		errno = EINVAL;
+		return (-1);
+	}
 	if ((ctl = calloc(1, sizeof(mix_ctl_t))) == NULL)
 		return (-1);
 	ctl->parent_dev = parent_dev;
@@ -225,24 +230,23 @@ mixer_add_ctl(struct mix_dev *parent_dev, int id, const char *name,
 		(void)strlcpy(ctl->name, name, sizeof(ctl->name));
 	ctl->mod = mod;
 	ctl->print = print;
+	TAILQ_INSERT_TAIL(&parent_dev->ctls, ctl, ctls);
+	parent_dev->nctl++;
 	
-	return (mixer_add_ctl_s(ctl));
+	return (0);
 }
 
 /*
- * Add a mixer control to a device.
+ * Same as `mixer_add_ctl`.
  */
 int
 mixer_add_ctl_s(mix_ctl_t *ctl)
 {
-	struct mix_dev *p = ctl->parent_dev;
-
-	if (ctl == NULL || p == NULL || ctl->mod == NULL || ctl->print == NULL)
+	if (ctl == NULL)
 		return (-1);
-	TAILQ_INSERT_TAIL(&p->ctls, ctl, ctls);
-	p->nctl++;
 
-	return (0);
+	return (mixer_add_ctl(ctl->parent_dev, ctl->id, ctl->name, 
+	    ctl->mod, ctl->print));
 }
 
 /*

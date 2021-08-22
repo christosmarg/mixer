@@ -213,7 +213,7 @@ struct mix_dev {
 The fields are follows:
 .Bl -tag -width "parent_mixer"
 .It Fa parent_mixer
-Pointer to the parent mixer.
+Pointer to the mixer the device is attached to.
 .It Fa name
 Device name given by the OSS API. Devices can have one of the following names:
 .Bd -ragged
@@ -256,7 +256,7 @@ struct mix_ctl {
 The fields are follows:
 .Bl -tag -width "parent_dev"
 .It Fa parent_dev
-Parent device for this control.
+Pointer to the device the control is attached to.
 .It Fa id
 Control ID assigned by the caller. Even though the library will
 report it, care has to be taken to not give a control the same ID in case

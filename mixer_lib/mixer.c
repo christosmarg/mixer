@@ -228,14 +228,11 @@ mixer_add_ctl(struct mix_dev *parent_dev, int id, const char *name,
 	ctl->mod = mod;
 	ctl->print = print;
 	dp = ctl->parent_dev;
-	/* Make sure the same ID or name already exists. */
-	if (!TAILQ_EMPTY(&dp->ctls)) {
-		TAILQ_FOREACH(cp, &dp->ctls, ctls) {
-			if (!strncmp(cp->name, name, sizeof(cp->name)) ||
-			    cp->id == id) {
-				errno = EINVAL;
-				return (-1);
-			}
+	/* Make sure the same ID or name doesn't exist already. */
+	TAILQ_FOREACH(cp, &dp->ctls, ctls) {
+		if (!strncmp(cp->name, name, sizeof(cp->name)) || cp->id == id) {
+			errno = EINVAL;
+			return (-1);
 		}
 	}
 	TAILQ_INSERT_TAIL(&dp->ctls, ctl, ctls);

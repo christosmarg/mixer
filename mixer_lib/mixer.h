@@ -32,7 +32,6 @@ __FBSDID("$FreeBSD$");
 #include <sys/soundcard.h>
 
 #include <limits.h>
-#include <math.h>
 
 #define MIX_ISSET(n,f)		(((1 << (n)) & (f)) ? 1 : 0)
 #define MIX_ISDEV(m,n)		MIX_ISSET(n, (m)->devmask)
@@ -65,7 +64,7 @@ struct mix_dev {
 #define MIX_VOLMIN		0.0f
 #define MIX_VOLMAX		1.0f
 #define MIX_VOLNORM(v)		((v) / 100.0f)
-#define MIX_VOLDENORM(v)	((int)roundf((v) * 100.0f))
+#define MIX_VOLDENORM(v)	((int)((v) * 100.0f + 0.5f))
 		float left;			/* left volume */
 		float right;			/* right volume */
 	} vol;

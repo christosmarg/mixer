@@ -18,22 +18,20 @@
  * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  * THE SOFTWARE.
+ *
+ * $FreeBSD$
  */
 
 #ifndef _MIXER_H_
 #define _MIXER_H_
 
-__BEGIN_DECLS
-
 #include <sys/cdefs.h>
-__FBSDID("$FreeBSD$");
-
 #include <sys/queue.h>
 #include <sys/soundcard.h>
 
 #include <limits.h>
 
-#define MIX_ISSET(n,f)		(((1 << (n)) & (f)) ? 1 : 0)
+#define MIX_ISSET(n,f)		(((1U << (n)) & (f)) ? 1 : 0)
 #define MIX_ISDEV(m,n)		MIX_ISSET(n, (m)->devmask)
 #define MIX_ISMUTE(m,n)		MIX_ISSET(n, (m)->mutemask)
 #define MIX_ISREC(m,n)		MIX_ISSET(n, (m)->recmask)
@@ -99,6 +97,8 @@ struct mixer {
 	int mode;				/* dev.pcm.X.mode sysctl */
 	int f_default;				/* default mixer flag */
 };
+
+__BEGIN_DECLS
 
 struct mixer *mixer_open(const char *);
 int mixer_close(struct mixer *);

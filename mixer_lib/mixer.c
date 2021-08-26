@@ -261,12 +261,13 @@ mixer_add_ctl_s(mix_ctl_t *ctl)
 int
 mixer_remove_ctl(mix_ctl_t *ctl)
 {
-	struct mix_dev *p = ctl->parent_dev;
+	struct mix_dev *p;
 
 	if (ctl == NULL) {
 		errno = EINVAL;
 		return (-1);
 	}
+	p = ctl->parent_dev;
 	if (!TAILQ_EMPTY(&p->ctls)) {
 		TAILQ_REMOVE(&p->ctls, ctl, ctls);
 		free(ctl);

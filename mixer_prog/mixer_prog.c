@@ -184,14 +184,19 @@ static void
 initctls(struct mixer *m)
 {
 	struct mix_dev *dp;
+	int rc = 0;
 
 #define C_VOL 0
 #define C_MUT 1
 #define C_SRC 2
 	TAILQ_FOREACH(dp, &m->devs, devs) {
-		(void)mixer_add_ctl(dp, C_VOL, "volume", mod_volume, print_volume);
-		(void)mixer_add_ctl(dp, C_MUT, "mute", mod_mute, print_mute);
-		(void)mixer_add_ctl(dp, C_SRC, "recsrc", mod_recsrc, print_recsrc);
+		rc += mixer_add_ctl(dp, C_VOL, "volume", mod_volume, print_volume);
+		rc += mixer_add_ctl(dp, C_MUT, "mute", mod_mute, print_mute);
+		rc += mixer_add_ctl(dp, C_SRC, "recsrc", mod_recsrc, print_recsrc);
+	}
+	if (rc) {
+		(void)mixer_close(m);
+		err(1, "cannot make controls");
 	}
 }
 

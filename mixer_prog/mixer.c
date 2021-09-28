@@ -63,7 +63,7 @@ main(int argc, char *argv[])
 	char *p, *bufp, *devstr, *ctlstr, *valstr = NULL;
 	int dunit, i, n, pall = 1;
 	int aflag = 0, dflag = 0, oflag = 0, sflag = 0;
-	char ch;
+	int ch;
 
 	while ((ch = getopt(argc, argv, "ad:f:os")) != -1) {
 		switch (ch) {
@@ -240,8 +240,12 @@ printdev(struct mixer *m, int oflag)
 	mix_ctl_t *cp;
 
 	if (!oflag) {
-		printf("    %-11s= %.2f:%.2f\t", 
-		    d->name, d->vol.left, d->vol.right);
+		char buffer[32];
+		(void)snprintf(buffer, sizeof(buffer),
+		    "%s.%s", d->name, "volume");
+
+		printf("    %-16s= %.2f:%.2f\t",
+		    buffer, d->vol.left, d->vol.right);
 		if (!MIX_ISREC(m, d->devno))
 			printf(" pbk");
 		if (MIX_ISREC(m, d->devno))
@@ -325,11 +329,19 @@ mod_volume(struct mix_dev *d, void *p)
 		if (*lstr == '+' || *lstr == '-')
 			lrel = rrel = 1;
 		v.left = strtof(lstr, NULL);
+
+		/* be backwards compatible */
+		if (strstr(lstr, ".") == NULL)
+			v.left /= 100.0f;
 	}
 	if (n > 1) {
 		if (*rstr == '+' || *rstr == '-')
 			rrel = 1;
 		v.right = strtof(rstr, NULL);
+
+		/* be backwards compatible */
+		if (strstr(rstr, ".") == NULL)
+			v.right /= 100.0f;
 	}
 	switch (n) {
 	case 1:
@@ -352,7 +364,7 @@ mod_volume(struct mix_dev *d, void *p)
 		lprev = m->dev->vol.left;
 		rprev = m->dev->vol.right;
 		if (mixer_set_vol(m, v) < 0)
-			warn("%s.%s=%.2f:%.2f", 
+			warn("%s.%s=%.2f:%.2f",
 			    m->dev->name, cp->name, v.left, v.right);
 		else
 			printf("%s.%s: %.2f:%.2f -> %.2f:%.2f\n",
@@ -429,7 +441,7 @@ mod_recsrc(struct mix_dev *d, void *p)
 	if (mixer_mod_recsrc(m, opt) < 0)
 		warn("%s.%s=%c", m->dev->name, cp->name, *val);
 	else
-		printf("%s.%s: %d -> %d\n", 
+		printf("%s.%s: %d -> %d\n",
 		    m->dev->name, cp->name, n, MIX_ISRECSRC(m, m->dev->devno));
 
 	return (0);
@@ -441,7 +453,7 @@ print_volume(struct mix_dev *d, void *p)
 	struct mixer *m = d->parent_mixer;
 	const char *ctl_name = p;
 
-	printf("%s.%s=%.2f:%.2f\n", 
+	printf("%s.%s=%.2f:%.2f\n",
 	    m->dev->name, ctl_name, m->dev->vol.left, m->dev->vol.right);
 
 	return (0);

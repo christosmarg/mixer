@@ -28,6 +28,7 @@
 
 #include <errno.h>
 #include <fcntl.h>
+#include <libgen.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -35,7 +36,7 @@
 
 #include "mixer.h"
 
-#define BASEPATH "/dev/mixer"
+#define	BASEPATH "/dev/mixer"
 
 static int _mixer_readvol(struct mixer *, struct mix_dev *);
 
@@ -57,7 +58,7 @@ _mixer_readvol(struct mixer *m, struct mix_dev *dev)
 
 /*
  * Open a mixer device in `/dev/mixerN`, where N is the number of the mixer.
- * Each device maps to an actual pcm audio card, so `/dev/mixer0` is the 
+ * Each device maps to an actual pcm audio card, so `/dev/mixer0` is the
  * mixer for pcm0, and so on.
  *
  * @param name		path to mixer device. NULL or "/dev/mixer" for the
@@ -69,27 +70,25 @@ mixer_open(const char *name)
 	struct mixer *m = NULL;
 	struct mix_dev *dp;
 	const char *names[SOUND_MIXER_NRDEVICES] = SOUND_DEVICE_NAMES;
+	char *p = NULL;
 	int i;
 
 	if ((m = calloc(1, sizeof(struct mixer))) == NULL)
 		goto fail;
 
 	if (name != NULL) {
-		/* `name` does not start with "/dev/mixer". */
-		if (strncmp(name, BASEPATH, strlen(BASEPATH)) != 0) {
-			errno = EINVAL;
+		/* XXX: should we remove `const` altogether? */
+		if ((p = strdup(basename((char *)name))) == NULL)
 			goto fail;
-		}
-		/* `name` is "/dev/mixer" so, we'll use the default unit. */
-		if (strncmp(name, BASEPATH, strlen(name)) == 0)
+		if (strncmp(p, "mixer", 5) == 0 && p[5] == '\0')
 			goto dunit;
-		m->unit = strtol(name + strlen(BASEPATH), NULL, 10);
+		(void)sscanf(name, "%*[^0123456789]%d", &m->unit);
 		(void)strlcpy(m->name, name, sizeof(m->name));
 	} else {
 dunit:
 		if ((m->unit = mixer_get_dunit()) < 0)
 			goto fail;
-		(void)snprintf(m->name, sizeof(m->name) - 1, "/dev/mixer%d", m->unit);
+		(void)snprintf(m->name, sizeof(m->name), "/dev/mixer%d", m->unit);
 	}
 
 	if ((m->fd = open(m->name, O_RDWR)) < 0)
@@ -101,9 +100,13 @@ dunit:
 	/* The unit number _must_ be set before the ioctl. */
 	m->mi.dev = m->unit;
 	m->ci.card = m->unit;
-	if (ioctl(m->fd, SNDCTL_MIXERINFO, &m->mi) < 0 || 
-	    ioctl(m->fd, SNDCTL_CARDINFO, &m->ci) < 0 || 
-	    ioctl(m->fd, SOUND_MIXER_READ_DEVMASK, &m->devmask) < 0 ||
+	if (ioctl(m->fd, SNDCTL_MIXERINFO, &m->mi) < 0) {
+		memset(&m->mi, 0, sizeof(m->mi));
+		strlcpy(m->mi.name, m->name, sizeof(m->mi.name));
+	}
+	if (ioctl(m->fd, SNDCTL_CARDINFO, &m->ci) < 0)
+		memset(&m->ci, 0, sizeof(m->ci));
+	if(ioctl(m->fd, SOUND_MIXER_READ_DEVMASK, &m->devmask) < 0 ||
 	    ioctl(m->fd, SOUND_MIXER_READ_MUTE, &m->mutemask) < 0 ||
 	    ioctl(m->fd, SOUND_MIXER_READ_RECMASK, &m->recmask) < 0 ||
 	    ioctl(m->fd, SOUND_MIXER_READ_RECSRC, &m->recsrc) < 0)
@@ -125,14 +128,15 @@ dunit:
 		TAILQ_INSERT_TAIL(&m->devs, dp, devs);
 		m->ndev++;
 	}
-
-	/* The default device is always "vol". */
 	m->dev = TAILQ_FIRST(&m->devs);
 
 	return (m);
 fail:
-	if (m != NULL)
-		(void)mixer_close(m);
+	if (p != NULL)
+		free(p);
+	/* XXX: do we need this? */
+	/*if (m != NULL)*/
+		/*(void)mixer_close(m);*/
 
 	return (NULL);
 }
@@ -238,7 +242,7 @@ mixer_add_ctl(struct mix_dev *parent_dev, int id, const char *name,
 	}
 	TAILQ_INSERT_TAIL(&dp->ctls, ctl, ctls);
 	dp->nctl++;
-	
+
 	return (0);
 }
 
@@ -251,7 +255,7 @@ mixer_add_ctl_s(mix_ctl_t *ctl)
 	if (ctl == NULL)
 		return (-1);
 
-	return (mixer_add_ctl(ctl->parent_dev, ctl->id, ctl->name, 
+	return (mixer_add_ctl(ctl->parent_dev, ctl->id, ctl->name,
 	    ctl->mod, ctl->print));
 }
 
@@ -324,7 +328,7 @@ mixer_set_vol(struct mixer *m, mix_volume_t vol)
 {
 	int v;
 
-	if (vol.left < MIX_VOLMIN || vol.left > MIX_VOLMAX || 
+	if (vol.left < MIX_VOLMIN || vol.left > MIX_VOLMAX ||
 	    vol.right < MIX_VOLMIN || vol.right > MIX_VOLMAX) {
 		errno = ERANGE;
 		return (-1);
@@ -432,7 +436,7 @@ mixer_get_dunit(void)
  * Change the default audio card. This is normally _not_ a mixer feature, but
  * it's useful to have, so the caller can avoid having to manually use
  * the sysctl API.
- * 
+ *
  * @param unit		the audio card number (e.g pcm0, pcm1, ...).
  */
 int
@@ -460,10 +464,10 @@ mixer_get_mode(int unit)
 	size_t size;
 	unsigned int mode;
 
-	(void)snprintf(buf, sizeof(buf) - 1, "dev.pcm.%d.mode", unit);
+	(void)snprintf(buf, sizeof(buf), "dev.pcm.%d.mode", unit);
 	size = sizeof(unsigned int);
 	if (sysctlbyname(buf, &mode, &size, NULL, 0) < 0)
-		return (-1);
+		return (0);
 
 	return (mode);
 }
@@ -477,7 +481,7 @@ mixer_get_nmixers(void)
 	struct mixer *m;
 	oss_sysinfo si;
 
-	/* 
+	/*
 	 * Open a dummy mixer because we need the `fd` field for the
 	 * `ioctl` to work.
 	 */

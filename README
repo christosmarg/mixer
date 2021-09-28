@@ -2,8 +2,7 @@ mixer
 =====
 
 An OSS mixer library implementation, a complete rewrite of mixer(8) 
-and sound(4) update for FreeBSD. Some of its development is part of
-Google Summer of Code 2021.
+and sound(4) update for FreeBSD.
 
 Usage
 -----

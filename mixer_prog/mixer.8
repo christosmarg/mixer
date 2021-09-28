@@ -22,7 +22,7 @@
 .\" $FreeBSD$
 .\"
 
-.Dd June 30, 2021
+.Dd September 22, 2021
 .Dt mixer 8
 .Os
 .Sh NAME
@@ -54,7 +54,7 @@ Change the default audio card to
 The unit has to be an integer value. To see what unit values are available, look
 at the number each mixer device has by running
 .Nm .
-.It Fl f Ar device 
+.It Fl f Ar device
 Open
 .Ar device
 as the mixer device (see FILES).
@@ -108,11 +108,13 @@ with one of the available devices):
 The
 .Ar dev.volume
 control modifies a device's volume. The optional
-.Ar lvol 
+.Ar lvol
 and/or
 .Ar rvol
-values have to be specified. The values have to be normalized 32-bit floats
-(0.0 to 1.0). If the the left or right volume values are prefixed with
+values have to be specified. The values have to be normalized 32-bit floats,
+from 0.0 to 1.0 inclusivly. If no "." character is present, the value is treated
+like a percentage, for backwards compatibility.
+If the the left or right volume values are prefixed with
 .Cm +
 or
 .Cm - ,
@@ -170,10 +172,10 @@ The mixer device, where
 .Ar N
 is the number of that device, for example
 .Ar /dev/mixer0 .
-PCM cards and mixers have a 1:1 relationship, which means that 
+PCM cards and mixers have a 1:1 relationship, which means that
 .Ar mixer0
 is the mixer for
-.Ar pcm0 
+.Ar pcm0
 and so on. By default,
 .Nm
 prints both the audio card's number and the mixer associated with it
@@ -199,7 +201,7 @@ mixer device to 0.65:
 .It $ mixer -f /dev/mixer0 vol.volume=0.65
 .El
 .Pp
-Increase the 
+Increase the
 .Ar mic
 device's left volume by 0.10 and decrease the right
 volume by 0.05:
@@ -223,7 +225,7 @@ recording sources:
 .El
 .Pp
 Dump
-.Ar /dev/mixer0 
+.Ar /dev/mixer0
 information to a file and retrieve back later
 .Bl -tag -width Ds -offset indent
 .It $ mixer -f /dev/mixer0 -o > info
@@ -238,6 +240,6 @@ information to a file and retrieve back later
 The
 .Nm
 utility first appeared in FreeBSD 2.0.5 and was rewritten completely in
-FreeBSD 12.2. \" FIXME: replace 12.2 with proper version.
+FreeBSD 14.0.
 .Sh AUTHORS
-.An Christos Margiolis Aq Mt christos@margiolis.net
+.An Christos Margiolis Aq Mt christos@FreeBSD.org

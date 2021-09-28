@@ -1,3 +1,341 @@
+diff --git a/sys/dev/sound/pcm/channel.c b/sys/dev/sound/pcm/channel.c
+index ecf89df4c9a..234a0cb2435 100644
+--- a/sys/dev/sound/pcm/channel.c
++++ b/sys/dev/sound/pcm/channel.c
+@@ -1218,6 +1218,8 @@ chn_init(struct pcm_channel *c, void *devinfo, int dir, int direction)
+ 	c->volume[SND_VOL_C_MASTER][SND_CHN_T_VOL_0DB] = SND_VOL_0DB_MASTER;
+ 	c->volume[SND_VOL_C_PCM][SND_CHN_T_VOL_0DB] = chn_vol_0db_pcm;
+ 
++	memset(c->muted, 0, sizeof(c->muted));
++
+ 	chn_vpc_reset(c, SND_VOL_C_PCM, 1);
+ 
+ 	ret = ENODEV;
+@@ -1389,6 +1391,75 @@ chn_getvolume_matrix(struct pcm_channel *c, int vc, int vt)
+ 	return (c->volume[vc][vt]);
+ }
+ 
++int
++chn_setmute_multi(struct pcm_channel *c, int vc, int mute)
++{
++	int i, ret;
++
++	ret = 0;
++
++	for (i = 0; i < SND_CHN_T_MAX; i++) {
++		if ((1 << i) & SND_CHN_LEFT_MASK)
++			ret |= chn_setmute_matrix(c, vc, i, mute);
++		else if ((1 << i) & SND_CHN_RIGHT_MASK)
++			ret |= chn_setmute_matrix(c, vc, i, mute) << 8;
++		else
++			ret |= chn_setmute_matrix(c, vc, i, mute) << 16;
++	}
++	return (ret);
++}
++
++int
++chn_setmute_matrix(struct pcm_channel *c, int vc, int vt, int mute)
++{
++	int i;
++
++	KASSERT(c != NULL && vc >= SND_VOL_C_MASTER && vc < SND_VOL_C_MAX &&
++	    (vc == SND_VOL_C_MASTER || (vc & 1)) &&
++	    (vt == SND_CHN_T_VOL_0DB || (vt >= SND_CHN_T_BEGIN && vt <= SND_CHN_T_END)),
++	    ("%s(): invalid mute matrix c=%p vc=%d vt=%d mute=%d",
++	    __func__, c, vc, vt, mute));
++
++	CHN_LOCKASSERT(c);
++
++	mute = (mute != 0);
++
++	c->muted[vc][vt] = mute;
++
++	/*
++	 * Do relative calculation here and store it into class + 1
++	 * to ease the job of feeder_volume.
++	 */
++	if (vc == SND_VOL_C_MASTER) {
++		for (vc = SND_VOL_C_BEGIN; vc <= SND_VOL_C_END;
++		    vc += SND_VOL_C_STEP)
++			c->muted[SND_VOL_C_VAL(vc)][vt] = mute;
++	} else if (vc & 1) {
++		if (vt == SND_CHN_T_VOL_0DB) {
++			for (i = SND_CHN_T_BEGIN; i <= SND_CHN_T_END;
++			    i += SND_CHN_T_STEP) {
++				c->muted[SND_VOL_C_VAL(vc)][i] = mute;
++			}
++		} else {
++			c->muted[SND_VOL_C_VAL(vc)][vt] = mute;
++		}
++	}
++	return (mute);
++}
++
++int
++chn_getmute_matrix(struct pcm_channel *c, int vc, int vt)
++{
++	KASSERT(c != NULL && vc >= SND_VOL_C_MASTER && vc < SND_VOL_C_MAX &&
++	    (vt == SND_CHN_T_VOL_0DB ||
++	    (vt >= SND_CHN_T_BEGIN && vt <= SND_CHN_T_END)),
++	    ("%s(): invalid mute matrix c=%p vc=%d vt=%d",
++	    __func__, c, vc, vt));
++	CHN_LOCKASSERT(c);
++
++	return (c->muted[vc][vt]);
++}
++
+ struct pcmchan_matrix *
+ chn_getmatrix(struct pcm_channel *c)
+ {
+diff --git a/sys/dev/sound/pcm/channel.h b/sys/dev/sound/pcm/channel.h
+index 969b8dba27d..45b517f22ce 100644
+--- a/sys/dev/sound/pcm/channel.h
++++ b/sys/dev/sound/pcm/channel.h
+@@ -166,7 +166,8 @@ struct pcm_channel {
+ 	struct pcmchan_matrix matrix;
+   	struct pcmchan_matrix matrix_scratch;
+ 
+-	int volume[SND_VOL_C_MAX][SND_CHN_T_VOL_MAX];
++	int16_t volume[SND_VOL_C_MAX][SND_CHN_T_VOL_MAX];
++  	int8_t muted[SND_VOL_C_MAX][SND_CHN_T_VOL_MAX];
+ 
+ 	void *data1, *data2;
+ };
+@@ -271,6 +272,9 @@ int chn_setvolume_multi(struct pcm_channel *c, int vc, int left, int right,
+     int center);
+ int chn_setvolume_matrix(struct pcm_channel *c, int vc, int vt, int val);
+ int chn_getvolume_matrix(struct pcm_channel *c, int vc, int vt);
++int chn_setmute_multi(struct pcm_channel *c, int vc, int mute);
++int chn_setmute_matrix(struct pcm_channel *c, int vc, int vt, int mute);
++int chn_getmute_matrix(struct pcm_channel *c, int vc, int vt);
+ void chn_vpc_reset(struct pcm_channel *c, int vc, int force);
+ int chn_setparam(struct pcm_channel *c, uint32_t format, uint32_t speed);
+ int chn_setspeed(struct pcm_channel *c, uint32_t speed);
+@@ -307,6 +311,8 @@ int chn_syncdestroy(struct pcm_channel *c);
+ #define CHN_GETVOLUME(x, y, z)		((x)->volume[y][z])
+ #endif
+ 
++#define CHN_GETMUTE(x, y, z)		((x)->muted[y][z])
++
+ #ifdef OSSV4_EXPERIMENT
+ int chn_getpeaks(struct pcm_channel *c, int *lpeak, int *rpeak);
+ #endif
+diff --git a/sys/dev/sound/pcm/dsp.c b/sys/dev/sound/pcm/dsp.c
+index 9dfc47d60fb..0c5c8af341d 100644
+--- a/sys/dev/sound/pcm/dsp.c
++++ b/sys/dev/sound/pcm/dsp.c
+@@ -964,6 +964,7 @@ dsp_ioctl_channel(struct cdev *dev, struct pcm_channel *volch, u_long cmd,
+ 	struct snddev_info *d;
+ 	struct pcm_channel *rdch, *wrch;
+ 	int j, devtype, ret;
++	int left, right, center, mute;
+ 
+ 	d = dsp_get_info(dev);
+ 	if (!PCM_REGISTERED(d) || !(dsp_get_flags(dev) & SD_F_VPC))
+@@ -1002,67 +1003,95 @@ dsp_ioctl_channel(struct cdev *dev, struct pcm_channel *volch, u_long cmd,
+ 	}
+ 
+ 	/* Final validation */
+-	if (volch != NULL) {
+-		CHN_LOCK(volch);
+-		if (!(volch->feederflags & (1 << FEEDER_VOLUME))) {
+-			CHN_UNLOCK(volch);
+-			return (-1);
+-		}
+-		if (volch->direction == PCMDIR_PLAY)
+-			wrch = volch;
+-		else
+-			rdch = volch;
+-	}
+-
+-	ret = EINVAL;
++	if (volch == NULL)
++		return (EINVAL);
+ 
+-	if (volch != NULL &&
+-	    ((j == SOUND_MIXER_PCM && volch->direction == PCMDIR_PLAY) ||
+-	    (j == SOUND_MIXER_RECLEV && volch->direction == PCMDIR_REC))) {
+-		if ((cmd & ~0xff) == MIXER_WRITE(0)) {
+-			int left, right, center;
++	CHN_LOCK(volch);
++	if (!(volch->feederflags & (1 << FEEDER_VOLUME))) {
++		CHN_UNLOCK(volch);
++		return (EINVAL);
++	}
+ 
++	switch (cmd & ~0xff) {
++	case MIXER_WRITE(0):
++		switch (j) {
++		case SOUND_MIXER_MUTE:
++			if (volch->direction == PCMDIR_REC) {
++				chn_setmute_multi(volch, SND_VOL_C_PCM, (*(int *)arg & SOUND_MASK_RECLEV) != 0);
++			} else {
++				chn_setmute_multi(volch, SND_VOL_C_PCM, (*(int *)arg & SOUND_MASK_PCM) != 0);
++			}
++			break;
++		case SOUND_MIXER_PCM:
++			if (volch->direction != PCMDIR_PLAY)
++				break;
+ 			left = *(int *)arg & 0x7f;
+ 			right = ((*(int *)arg) >> 8) & 0x7f;
+ 			center = (left + right) >> 1;
+-			chn_setvolume_multi(volch, SND_VOL_C_PCM, left, right,
+-			    center);
+-		} else if ((cmd & ~0xff) == MIXER_READ(0)) {
+-			*(int *)arg = CHN_GETVOLUME(volch,
+-				SND_VOL_C_PCM, SND_CHN_T_FL);
+-			*(int *)arg |= CHN_GETVOLUME(volch,
+-				SND_VOL_C_PCM, SND_CHN_T_FR) << 8;
++			chn_setvolume_multi(volch, SND_VOL_C_PCM,
++			    left, right, center);
++			break;
++		case SOUND_MIXER_RECLEV:
++			if (volch->direction != PCMDIR_REC)
++				break;
++			left = *(int *)arg & 0x7f;
++			right = ((*(int *)arg) >> 8) & 0x7f;
++			center = (left + right) >> 1;
++			chn_setvolume_multi(volch, SND_VOL_C_PCM,
++			    left, right, center);
++			break;
++		default:
++			/* ignore all other mixer writes */
++			break;
+ 		}
+-		ret = 0;
+-	} else if (rdch != NULL || wrch != NULL) {
++		break;
++
++	case MIXER_READ(0):
+ 		switch (j) {
++		case SOUND_MIXER_MUTE:
++			mute = CHN_GETMUTE(volch, SND_VOL_C_PCM, SND_CHN_T_FL) ||
++			    CHN_GETMUTE(volch, SND_VOL_C_PCM, SND_CHN_T_FR);
++			if (volch->direction == PCMDIR_REC) {
++				*(int *)arg = mute << SOUND_MIXER_RECLEV;
++			} else {
++				*(int *)arg = mute << SOUND_MIXER_PCM;
++			}
++			break;
++		case SOUND_MIXER_PCM:
++			if (volch->direction != PCMDIR_PLAY)
++				break;
++			*(int *)arg = CHN_GETVOLUME(volch,
++			    SND_VOL_C_PCM, SND_CHN_T_FL);
++			*(int *)arg |= CHN_GETVOLUME(volch,
++			    SND_VOL_C_PCM, SND_CHN_T_FR) << 8;
++			break;
++		case SOUND_MIXER_RECLEV:
++			if (volch->direction != PCMDIR_REC)
++				break;
++			*(int *)arg = CHN_GETVOLUME(volch,
++			    SND_VOL_C_PCM, SND_CHN_T_FL);
++			*(int *)arg |= CHN_GETVOLUME(volch,
++			    SND_VOL_C_PCM, SND_CHN_T_FR) << 8;
++			break;
+ 		case SOUND_MIXER_DEVMASK:
+ 		case SOUND_MIXER_CAPS:
+ 		case SOUND_MIXER_STEREODEVS:
+-			if ((cmd & ~0xff) == MIXER_READ(0)) {
+-				*(int *)arg = 0;
+-				if (rdch != NULL)
+-					*(int *)arg |= SOUND_MASK_RECLEV;
+-				if (wrch != NULL)
+-					*(int *)arg |= SOUND_MASK_PCM;
+-			}
+-			ret = 0;
+-			break;
+-		case SOUND_MIXER_RECMASK:
+-		case SOUND_MIXER_RECSRC:
+-			if ((cmd & ~0xff) == MIXER_READ(0))
+-				*(int *)arg = 0;
+-			ret = 0;
++			if (volch->direction == PCMDIR_REC)
++				*(int *)arg = SOUND_MASK_RECLEV;
++			else
++				*(int *)arg = SOUND_MASK_PCM;
+ 			break;
+ 		default:
++			*(int *)arg = 0;
+ 			break;
+ 		}
+-	}
+-
+-	if (volch != NULL)
+-		CHN_UNLOCK(volch);
++		break;
+ 
+-	return (ret);
++	default:
++		break;
++	}
++	CHN_UNLOCK(volch);
++	return (0);
+ }
+ 
+ static int
+diff --git a/sys/dev/sound/pcm/feeder_volume.c b/sys/dev/sound/pcm/feeder_volume.c
+index 322d7f6b2c8..2312bd89c9d 100644
+--- a/sys/dev/sound/pcm/feeder_volume.c
++++ b/sys/dev/sound/pcm/feeder_volume.c
+@@ -237,10 +237,13 @@ static int
+ feed_volume_feed(struct pcm_feeder *f, struct pcm_channel *c, uint8_t *b,
+     uint32_t count, void *source)
+ {
++	int temp_vol[SND_CHN_T_VOL_MAX];
+ 	struct feed_volume_info *info;
+ 	uint32_t j, align;
+-	int i, *vol, *matrix;
++	int i, *matrix;
+ 	uint8_t *dst;
++	const int16_t *vol;
++	const int8_t *muted;
+ 
+ 	/*
+ 	 * Fetch filter data operation.
+@@ -251,6 +254,7 @@ feed_volume_feed(struct pcm_feeder *f, struct pcm_channel *c, uint8_t *b,
+ 		return (FEEDER_FEED(f->source, c, b, count, source));
+ 
+ 	vol = c->volume[SND_VOL_C_VAL(info->volume_class)];
++	muted = c->muted[SND_VOL_C_VAL(info->volume_class)];
+ 	matrix = info->matrix;
+ 
+ 	/*
+@@ -258,17 +262,22 @@ feed_volume_feed(struct pcm_feeder *f, struct pcm_channel *c, uint8_t *b,
+ 	 */
+ 	j = 0;
+ 	i = info->channels;
+-	do {
+-		if (vol[matrix[--i]] != SND_VOL_FLAT) {
++	while (i--) {
++		if (vol[matrix[i]] != SND_VOL_FLAT ||
++		    muted[matrix[i]] != 0) {
+ 			j = 1;
+ 			break;
+ 		}
+-	} while (i != 0);
++	}
+ 
+ 	/* Nope, just bypass entirely. */
+ 	if (j == 0)
+ 		return (FEEDER_FEED(f->source, c, b, count, source));
+ 
++	/* Check if any controls are muted. */
++	for (j = 0; j != SND_CHN_T_VOL_MAX; j++)
++		temp_vol[j] = muted[j] ? 0 : vol[j];
++
+ 	dst = b;
+ 	align = info->bps * info->channels;
+ 
+@@ -281,7 +290,7 @@ feed_volume_feed(struct pcm_feeder *f, struct pcm_channel *c, uint8_t *b,
+ 		if (j == 0)
+ 			break;
+ 
+-		info->apply(vol, matrix, info->channels, dst, j);
++		info->apply(temp_vol, matrix, info->channels, dst, j);
+ 
+ 		j *= align;
+ 		dst += j;
 diff --git a/sys/dev/sound/pcm/mixer.c b/sys/dev/sound/pcm/mixer.c
 index 92c5f3d613e..8275d1a2684 100644
 --- a/sys/dev/sound/pcm/mixer.c

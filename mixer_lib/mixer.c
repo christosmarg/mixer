@@ -82,7 +82,7 @@ mixer_open(const char *name)
 			goto fail;
 		if (strncmp(p, "mixer", 5) == 0 && p[5] == '\0')
 			goto dunit;
-		(void)sscanf(name, "%*[^0123456789]%d", &m->unit);
+		(void)sscanf(p, "%*[^0123456789]%d", &m->unit);
 		(void)strlcpy(m->name, name, sizeof(m->name));
 	} else {
 dunit:

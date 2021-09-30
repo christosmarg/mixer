@@ -2,7 +2,8 @@ mixer
 =====
 
 An OSS mixer library implementation, a complete rewrite of mixer(8) 
-and sound(4) update for FreeBSD.
+and sound(4) update for FreeBSD. The project was added to the base
+system in FreeBSD 14.0.
 
 Usage
 -----

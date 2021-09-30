@@ -1,3 +1,3 @@
-SUBDIR=		mixer_lib mixer_prog
+SUBDIR=		lib/libmixer usr.sbin/mixer
 
 .include <bsd.subdir.mk>

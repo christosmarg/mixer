@@ -36,8 +36,6 @@
 
 #include "mixer.h"
 
-#define	BASEPATH "/dev/mixer"
-
 static int _mixer_readvol(struct mixer *, struct mix_dev *);
 
 /*
@@ -70,23 +68,21 @@ mixer_open(const char *name)
 	struct mixer *m = NULL;
 	struct mix_dev *dp;
 	const char *names[SOUND_MIXER_NRDEVICES] = SOUND_DEVICE_NAMES;
-	char *p = NULL;
+	char *p;
 	int i;
 
 	if ((m = calloc(1, sizeof(struct mixer))) == NULL)
 		goto fail;
 
 	if (name != NULL) {
-		/* XXX: should we remove `const` altogether? */
-		if ((p = strdup(basename((char *)name))) == NULL)
-			goto fail;
+		p = basename((char *)name);
 		if (strncmp(p, "mixer", 5) == 0 && p[5] == '\0')
-			goto dunit;
+			goto default_unit;
 		(void)sscanf(p, "%*[^0123456789]%d", &m->unit);
 		(void)strlcpy(m->name, name, sizeof(m->name));
 	} else {
-dunit:
-		if ((m->unit = mixer_get_dunit()) < 0)
+default_unit:
+		if ((m->unit = mixer_get_default_unit()) < 0)
 			goto fail;
 		(void)snprintf(m->name, sizeof(m->name), "/dev/mixer%d", m->unit);
 	}
@@ -95,7 +91,7 @@ dunit:
 		goto fail;
 
 	m->devmask = m->recmask = m->recsrc = 0;
-	m->f_default = m->unit == mixer_get_dunit();
+	m->f_default = m->unit == mixer_get_default_unit();
 	m->mode = mixer_get_mode(m->unit);
 	/* The unit number _must_ be set before the ioctl. */
 	m->mi.dev = m->unit;
@@ -106,7 +102,7 @@ dunit:
 	}
 	if (ioctl(m->fd, SNDCTL_CARDINFO, &m->ci) < 0)
 		memset(&m->ci, 0, sizeof(m->ci));
-	if(ioctl(m->fd, SOUND_MIXER_READ_DEVMASK, &m->devmask) < 0 ||
+	if (ioctl(m->fd, SOUND_MIXER_READ_DEVMASK, &m->devmask) < 0 ||
 	    ioctl(m->fd, SOUND_MIXER_READ_MUTE, &m->mutemask) < 0 ||
 	    ioctl(m->fd, SOUND_MIXER_READ_RECMASK, &m->recmask) < 0 ||
 	    ioctl(m->fd, SOUND_MIXER_READ_RECSRC, &m->recsrc) < 0)
@@ -132,8 +128,6 @@ dunit:
 
 	return (m);
 fail:
-	if (p != NULL)
-		free(p);
 	/* XXX: do we need this? */
 	/*if (m != NULL)*/
 		/*(void)mixer_close(m);*/
@@ -420,7 +414,7 @@ mixer_mod_recsrc(struct mixer *m, int opt)
  * and set the mixer structure's `f_default` flag.
  */
 int
-mixer_get_dunit(void)
+mixer_get_default_unit(void)
 {
 	size_t size;
 	int unit;
@@ -440,7 +434,7 @@ mixer_get_dunit(void)
  * @param unit		the audio card number (e.g pcm0, pcm1, ...).
  */
 int
-mixer_set_dunit(struct mixer *m, int unit)
+mixer_set_default_unit(struct mixer *m, int unit)
 {
 	size_t size;
 

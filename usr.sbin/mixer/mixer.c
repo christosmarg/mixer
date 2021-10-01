@@ -38,7 +38,7 @@ static void printminfo(struct mixer *, int);
 static void printdev(struct mixer *, int);
 static void printrecsrc(struct mixer *, int); /* XXX: change name */
 /* Control handlers */
-static int mod_dunit(struct mix_dev *, void *);
+static int mod_default_unit(struct mix_dev *, void *);
 static int mod_volume(struct mix_dev *, void *);
 static int mod_mute(struct mix_dev *, void *);
 static int mod_recsrc(struct mix_dev *, void *);
@@ -46,11 +46,11 @@ static int print_volume(struct mix_dev *, void *);
 static int print_mute(struct mix_dev *, void *);
 static int print_recsrc(struct mix_dev *, void *);
 
-static const mix_ctl_t ctl_dunit = {
+static const mix_ctl_t ctl_default_unit = {
 	.parent_dev	= NULL,
 	.id		= -1,
 	.name		= "default_unit",
-	.mod		= mod_dunit,
+	.mod		= mod_default_unit,
 	.print		= NULL
 };
 
@@ -61,7 +61,7 @@ main(int argc, char *argv[])
 	mix_ctl_t *cp;
 	char *name = NULL, buf[NAME_MAX];
 	char *p, *bufp, *devstr, *ctlstr, *valstr = NULL;
-	int dunit, i, n, pall = 1;
+	int du, i, n, pall = 1;
 	int aflag = 0, dflag = 0, oflag = 0, sflag = 0;
 	int ch;
 
@@ -71,7 +71,7 @@ main(int argc, char *argv[])
 			aflag = 1;
 			break;
 		case 'd':
-			dunit = strtol(optarg, NULL, 10);
+			du = strtol(optarg, NULL, 10);
 			if (errno == EINVAL || errno == ERANGE)
 				err(1, "strtol");
 			dflag = 1;
@@ -119,7 +119,7 @@ main(int argc, char *argv[])
 
 	initctls(m);
 
-	if (dflag && ctl_dunit.mod(m->dev, &dunit) < 0)
+	if (dflag && ctl_default_unit.mod(m->dev, &du) < 0)
 		goto parse;
 	if (sflag) {
 		printrecsrc(m, oflag);
@@ -287,20 +287,20 @@ printrecsrc(struct mixer *m, int oflag)
 }
 
 static int
-mod_dunit(struct mix_dev *d, void *p)
+mod_default_unit(struct mix_dev *d, void *p)
 {
-	int dunit = *((int *)p);
+	int du = *((int *)p);
 	int n;
 
-	if ((n = mixer_get_dunit()) < 0) {
+	if ((n = mixer_get_default_unit()) < 0) {
 		warn("cannot get default unit");
 		return (-1);
 	}
-	if (mixer_set_dunit(d->parent_mixer, dunit) < 0) {
-		warn("cannot set default unit to: %d", dunit);
+	if (mixer_set_default_unit(d->parent_mixer, du) < 0) {
+		warn("cannot set default unit to: %d", du);
 		return (-1);
 	}
-	printf("%s: %d -> %d\n", ctl_dunit.name, n, dunit);
+	printf("%s: %d -> %d\n", ctl_default_unit.name, n, du);
 
 	return (0);
 }

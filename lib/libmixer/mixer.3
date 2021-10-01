@@ -38,8 +38,8 @@
 .Nm mixer_set_vol ,
 .Nm mixer_set_mute ,
 .Nm mixer_mod_recsrc ,
-.Nm mixer_get_dunit ,
-.Nm mixer_set_dunit ,
+.Nm mixer_get_default_unit ,
+.Nm mixer_set_default_unit ,
 .Nm mixer_get_mode,
 .Nm mixer_get_nmixers ,
 .Nm MIX_ISDEV ,
@@ -80,9 +80,9 @@ Mixer library (libmixer, -lmixer)
 .Ft int
 .Fn mixer_mod_recsrc "struct mixer *m" "int opt"
 .Ft int
-.Fn mixer_get_dunit "void"
+.Fn mixer_get_default_unit "void"
 .Ft int
-.Fn mixer_set_dunit "struct mixer *m" "int unit"
+.Fn mixer_set_default_unit "struct mixer *m" "int unit"
 .Ft int
 .Fn mixer_get_mode "int unit"
 .Ft int
@@ -358,9 +358,9 @@ Toggle device from the recording sources.
 .El
 .Pp
 The
-.Fn mixer_get_dunit
+.Fn mixer_get_default_unit
 and
-.Fn mixer_set_dunit
+.Fn mixer_set_default_unit
 functions get and set the default audio card in the system. Although this is
 not really a mixer feature, it's useful to have instead of having to use
 the
@@ -457,7 +457,7 @@ The
 .Fn mixer_set_mute ,
 .Fn mixer_mod_recsrc ,
 .Fn mixer_get_dunut ,
-.Fn mixer_set_dunit
+.Fn mixer_set_default_unit
 and
 .Fn mixer_get_nmixers
 functions return 0 or positive values on success and -1 on failure.

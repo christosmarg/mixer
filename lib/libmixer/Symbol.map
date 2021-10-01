@@ -2,7 +2,7 @@
  * $FreeBSD$
  */
 
-LIBMIXER_1.0 {
+FBSD_1.7 {
 	mixer_open;
 	mixer_close;
 	mixer_get_dev;
@@ -15,14 +15,8 @@ LIBMIXER_1.0 {
 	mixer_set_vol;
 	mixer_set_mute;
 	mixer_mod_recsrc;
-	mixer_get_default_unit;
-	mixer_set_default_unit;
+	mixer_get_dunit;
+	mixer_set_dunit;
 	mixer_get_mode;
 	mixer_get_nmixers;
-	MIX_ISDEV;
-	MIX_ISMUTE;
-	MIX_ISREC;
-	MIX_ISRECSRC;
-	MIX_VOLNORM;
-	MIX_VOLDENORM;
 };

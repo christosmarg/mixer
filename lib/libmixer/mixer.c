@@ -77,12 +77,12 @@ mixer_open(const char *name)
 	if (name != NULL) {
 		p = basename((char *)name);
 		if (strncmp(p, "mixer", 5) == 0 && p[5] == '\0')
-			goto default_unit;
+			goto dunit;
 		(void)sscanf(p, "%*[^0123456789]%d", &m->unit);
 		(void)strlcpy(m->name, name, sizeof(m->name));
 	} else {
-default_unit:
-		if ((m->unit = mixer_get_default_unit()) < 0)
+dunit:
+		if ((m->unit = mixer_get_dunit()) < 0)
 			goto fail;
 		(void)snprintf(m->name, sizeof(m->name), "/dev/mixer%d", m->unit);
 	}
@@ -91,7 +91,7 @@ default_unit:
 		goto fail;
 
 	m->devmask = m->recmask = m->recsrc = 0;
-	m->f_default = m->unit == mixer_get_default_unit();
+	m->f_default = m->unit == mixer_get_dunit();
 	m->mode = mixer_get_mode(m->unit);
 	/* The unit number _must_ be set before the ioctl. */
 	m->mi.dev = m->unit;
@@ -414,7 +414,7 @@ mixer_mod_recsrc(struct mixer *m, int opt)
  * and set the mixer structure's `f_default` flag.
  */
 int
-mixer_get_default_unit(void)
+mixer_get_dunit(void)
 {
 	size_t size;
 	int unit;
@@ -434,7 +434,7 @@ mixer_get_default_unit(void)
  * @param unit		the audio card number (e.g pcm0, pcm1, ...).
  */
 int
-mixer_set_default_unit(struct mixer *m, int unit)
+mixer_set_dunit(struct mixer *m, int unit)
 {
 	size_t size;
 

@@ -113,8 +113,8 @@ mix_ctl_t *mixer_get_ctl_byname(struct mix_dev *, const char *);
 int mixer_set_vol(struct mixer *, mix_volume_t);
 int mixer_set_mute(struct mixer *, int);
 int mixer_mod_recsrc(struct mixer *, int);
-int mixer_get_default_unit(void);
-int mixer_set_default_unit(struct mixer *, int);
+int mixer_get_dunit(void);
+int mixer_set_dunit(struct mixer *, int);
 int mixer_get_mode(int);
 int mixer_get_nmixers(void);
 

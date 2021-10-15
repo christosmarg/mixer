@@ -28,13 +28,14 @@
 
 #include <errno.h>
 #include <fcntl.h>
-#include <libgen.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 
 #include "mixer.h"
+
+#define	BASEPATH "/dev/mixer"
 
 static int _mixer_readvol(struct mixer *, struct mix_dev *);
 
@@ -68,17 +69,21 @@ mixer_open(const char *name)
 	struct mixer *m = NULL;
 	struct mix_dev *dp;
 	const char *names[SOUND_MIXER_NRDEVICES] = SOUND_DEVICE_NAMES;
-	char *p;
 	int i;
 
 	if ((m = calloc(1, sizeof(struct mixer))) == NULL)
 		goto fail;
 
 	if (name != NULL) {
-		p = basename((char *)name);
-		if (strncmp(p, "mixer", 5) == 0 && p[5] == '\0')
-			goto dunit;
-		(void)sscanf(p, "%*[^0123456789]%d", &m->unit);
+		/* `name` does not start with "/dev/mixer". */
+		if (strncmp(name, BASEPATH, strlen(BASEPATH)) != 0) {
+			m->unit = -1;
+		} else {
+			/* `name` is "/dev/mixer" so, we'll use the default unit. */
+			if (strncmp(name, BASEPATH, strlen(name)) == 0)
+				goto dunit;
+			m->unit = strtol(name + strlen(BASEPATH), NULL, 10);
+		}
 		(void)strlcpy(m->name, name, sizeof(m->name));
 	} else {
 dunit:
@@ -124,13 +129,14 @@ dunit:
 		TAILQ_INSERT_TAIL(&m->devs, dp, devs);
 		m->ndev++;
 	}
+
+	/* The default device is always "vol". */
 	m->dev = TAILQ_FIRST(&m->devs);
 
 	return (m);
 fail:
-	/* XXX: do we need this? */
-	/*if (m != NULL)*/
-		/*(void)mixer_close(m);*/
+	if (m != NULL)
+		(void)mixer_close(m);
 
 	return (NULL);
 }

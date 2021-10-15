@@ -24,12 +24,11 @@
 
 #include <err.h>
 #include <errno.h>
+#include <mixer.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-
-#include <mixer.h>
 
 static void usage(void) __dead2;
 static void initctls(struct mixer *);
@@ -49,7 +48,7 @@ static int print_recsrc(struct mix_dev *, void *);
 static const mix_ctl_t ctl_dunit = {
 	.parent_dev	= NULL,
 	.id		= -1,
-	.name		= "dunit",
+	.name		= "default_unit",
 	.mod		= mod_dunit,
 	.print		= NULL
 };
@@ -61,7 +60,7 @@ main(int argc, char *argv[])
 	mix_ctl_t *cp;
 	char *name = NULL, buf[NAME_MAX];
 	char *p, *bufp, *devstr, *ctlstr, *valstr = NULL;
-	int du, i, n, pall = 1;
+	int dunit, i, n, pall = 1;
 	int aflag = 0, dflag = 0, oflag = 0, sflag = 0;
 	int ch;
 
@@ -71,7 +70,7 @@ main(int argc, char *argv[])
 			aflag = 1;
 			break;
 		case 'd':
-			du = strtol(optarg, NULL, 10);
+			dunit = strtol(optarg, NULL, 10);
 			if (errno == EINVAL || errno == ERANGE)
 				err(1, "strtol");
 			dflag = 1;
@@ -119,7 +118,7 @@ main(int argc, char *argv[])
 
 	initctls(m);
 
-	if (dflag && ctl_dunit.mod(m->dev, &du) < 0)
+	if (dflag && ctl_dunit.mod(m->dev, &dunit) < 0)
 		goto parse;
 	if (sflag) {
 		printrecsrc(m, oflag);
@@ -219,15 +218,23 @@ printminfo(struct mixer *m, int oflag)
 
 	if (oflag)
 		return;
-	printf("%s: <%s> %s", m->mi.name, m->ci.longname, m->ci.hw_info);
-	printf(" (");
+	printf("%s:", m->mi.name);
+	if (*m->ci.longname != '\0')
+		printf(" <%s>", m->ci.longname);
+	if (*m->ci.hw_info != '\0')
+		printf(" %s", m->ci.hw_info);
+
+	if (m->mode != 0)
+		printf(" (");
 	if (m->mode & MIX_MODE_PLAY)
 		printf("play");
 	if ((m->mode & playrec) == playrec)
 		printf("/");
 	if (m->mode & MIX_MODE_REC)
 		printf("rec");
-	printf(")");
+	if (m->mode != 0)
+		printf(")");
+
 	if (m->f_default)
 		printf(" (default)");
 	printf("\n");
@@ -279,8 +286,7 @@ printrecsrc(struct mixer *m, int oflag)
 			printf("%s", dp->name);
 			if (oflag)
 				printf(".%s=+%s",
-				    mixer_get_ctl(dp, C_SRC)->name,
-				    n ? " " : "");
+				    mixer_get_ctl(dp, C_SRC)->name, n ? " " : "");
 		}
 	}
 	printf("\n");
@@ -289,18 +295,18 @@ printrecsrc(struct mixer *m, int oflag)
 static int
 mod_dunit(struct mix_dev *d, void *p)
 {
-	int du = *((int *)p);
+	int dunit = *((int *)p);
 	int n;
 
 	if ((n = mixer_get_dunit()) < 0) {
 		warn("cannot get default unit");
 		return (-1);
 	}
-	if (mixer_set_dunit(d->parent_mixer, du) < 0) {
-		warn("cannot set default unit to: %d", du);
+	if (mixer_set_dunit(d->parent_mixer, dunit) < 0) {
+		warn("cannot set default unit to: %d", dunit);
 		return (-1);
 	}
-	printf("%s: %d -> %d\n", ctl_dunit.name, n, du);
+	printf("%s: %d -> %d\n", ctl_dunit.name, n, dunit);
 
 	return (0);
 }

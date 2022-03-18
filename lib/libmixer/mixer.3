@@ -175,7 +175,7 @@ Bit mask containing all supported devices for the mixer.
 For example, if device 10 is supported, then the 10th bit in the mask will be set.
 By default,
 .Fn mixer_open
-stores only the supported devices in devs, so it's very unlikely this mask will
+stores only the supported devices in devs, so it is very unlikely this mask will
 be needed.
 .It Fa mutemask
 Bit mask containing all muted devices.
@@ -316,7 +316,7 @@ opens the default mixer (hw.snd.defaul_unit).
 The
 .Fn mixer_close
 function frees resources and closes the mixer device.
-It's a good practice to always call it when the application is done using the mixer.
+It is a good practice to always call it when the application is done using the mixer.
 .Ss Manipulating the mixer
 The
 .Fn mixer_get_dev
@@ -373,7 +373,7 @@ The
 and
 .Fn mixer_set_dunit
 functions get and set the default audio card in the system.
-Although this is not really a mixer feature, it's useful to have instead of \
+Although this is not really a mixer feature, it is useful to have instead of \
 having to use the
 .Xr sysctl 3
 controls.
@@ -401,7 +401,7 @@ function returns the total number of mixer devices in the system.
 The
 .Fn MIX_ISDEV
 macro checks if a device is actually a valid device for a given mixer.
-It's very unlikely that this macro will ever be needed since the library \
+It is very unlikely that this macro will ever be needed since the library \
 stores only valid devices by default.
 .Pp
 The
@@ -419,7 +419,7 @@ macro checks if a device is a recording source.
 The
 .Fn MIX_VOLNORM
 macro normalizes a value to 32-bit floating point number.
-It's used to normalize the volumes read from the OSS API.
+It is used to normalize the volumes read from the OSS API.
 .Pp
 The
 .Fn MIX_VOLDENORM
@@ -439,7 +439,7 @@ function does the same thing as with
 .Fn mix_add_ctl
 but the caller passes a
 .Ft mix_ctl_t *
-structure instead of each field as a seperate argument.
+structure instead of each field as a separate argument.
 .Pp
 The
 .Fn mixer_remove_ctl

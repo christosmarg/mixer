@@ -157,7 +157,8 @@ parse:
 			printdev(m, 1);
 			pall = 0;
 			goto next;
-		} else if (shorthand) {
+		} else if (shorthand && ((*p >= '0' && *p <= '9') ||
+		    *p == '+' || *p == '-' || *p == '.')) {
 			/*
 			 * Input: `dev=N` -> shorthand for `dev.volume=N`.
 			 *
@@ -165,12 +166,9 @@ parse:
 			 * long as we're sure the very beginning is right,
 			 * mod_volume() will take care of parsing it properly.
 			 */
-			if (*p == '+' || *p == '-' || *p == '.' ||
-			    (*p >= '0' && *p <= '9')) {
-				cp = mixer_get_ctl(m->dev, C_VOL);
-				cp->mod(cp->parent_dev, p);
-				goto next;
-			}
+			cp = mixer_get_ctl(m->dev, C_VOL);
+			cp->mod(cp->parent_dev, p);
+			goto next;
 		}
 		ctlstr = strsep(&p, "=");
 		if ((cp = mixer_get_ctl_byname(m->dev, ctlstr)) == NULL) {

@@ -66,7 +66,7 @@ main(int argc, char *argv[])
 	mix_ctl_t *cp;
 	char *name = NULL, buf[NAME_MAX];
 	char *p, *q, *devstr, *ctlstr, *valstr = NULL;
-	int dunit, i, n, pall = 1;
+	int dunit, i, n, pall = 1, shorthand = 0;
 	int aflag = 0, dflag = 0, oflag = 0, sflag = 0;
 	int ch;
 
@@ -137,6 +137,15 @@ parse:
 	while (argc > 0) {
 		if ((p = strdup(*argv)) == NULL)
 			err(1, "strdup(%s)", *argv);
+
+		/* Check if we're using the shorthand syntax for volume setting. */
+		for (q = p; *q != '\0'; q++) {
+			if (*q == '=')
+				shorthand = 1;
+			else if (*q == '.' && shorthand)
+				shorthand = 0;
+		}
+
 		/* Split the string into device, control and value. */
 		devstr = strsep(&p, ".=");
 		if ((m->dev = mixer_get_dev_byname(m, devstr)) == NULL) {
@@ -148,11 +157,16 @@ parse:
 			printdev(m, 1);
 			pall = 0;
 			goto next;
-		} else {
-			for (q = p; (*q >= '0' && *q <= '9') || *q == '.'; q++)
-				;	/* nothing */
-			/* Input: `dev=N` -> shorthand for `dev.volume=N`. */
-			if (*q == '\0') {
+		} else if (shorthand) {
+			/*
+			 * Input: `dev=N` -> shorthand for `dev.volume=N`.
+			 *
+			 * We don't care what the rest of the string contains as
+			 * long as we're sure the very beginning is right,
+			 * mod_volume() will take care of parsing it properly.
+			 */
+			if (*p == '+' || *p == '-' || *p == '.' ||
+			    (*p >= '0' && *p <= '9')) {
 				cp = mixer_get_ctl(m->dev, C_VOL);
 				cp->mod(cp->parent_dev, p);
 				goto next;
@@ -163,7 +177,6 @@ parse:
 			warnx("%s.%s: no such control", devstr, ctlstr);
 			goto next;
 		}
-
 		/* Input: `dev.control`. */
 		if (p == NULL) {
 			(void)cp->print(cp->parent_dev, cp->name);

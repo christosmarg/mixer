@@ -30,9 +30,11 @@
 #include <string.h>
 #include <unistd.h>
 
-#define C_VOL 0
-#define C_MUT 1
-#define C_SRC 2
+enum {
+	C_VOL = 0,
+	C_MUT,
+	C_SRC,
+};
 
 static void usage(void) __dead2;
 static void initctls(struct mixer *);
@@ -147,7 +149,7 @@ parse:
 			pall = 0;
 			goto next;
 		} else {
-			for (q = p; *q >= '0' && *q <= '9'; q++)
+			for (q = p; (*q >= '0' && *q <= '9') || *q == '.'; q++)
 				;	/* nothing */
 			/* Input: `dev=N` -> shorthand for `dev.volume=N`. */
 			if (*q == '\0') {

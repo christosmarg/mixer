@@ -66,7 +66,7 @@ main(int argc, char *argv[])
 	mix_ctl_t *cp;
 	char *name = NULL, buf[NAME_MAX];
 	char *p, *q, *devstr, *ctlstr, *valstr = NULL;
-	int dunit, i, n, pall = 1, shorthand = 0;
+	int dunit, i, n, pall = 1, shorthand;
 	int aflag = 0, dflag = 0, oflag = 0, sflag = 0;
 	int ch;
 
@@ -139,11 +139,15 @@ parse:
 			err(1, "strdup(%s)", *argv);
 
 		/* Check if we're using the shorthand syntax for volume setting. */
+		shorthand = 0;
 		for (q = p; *q != '\0'; q++) {
-			if (*q == '=')
-				shorthand = 1;
-			else if (*q == '.' && shorthand)
-				shorthand = 0;
+			if (*q == '=') {
+				q++;
+				shorthand = ((*q >= '0' && *q <= '9') ||
+				    *q == '+' || *q == '-' || *q == '.');
+				break;
+			} else if (*q == '.')
+				break;
 		}
 
 		/* Split the string into device, control and value. */
@@ -157,8 +161,7 @@ parse:
 			printdev(m, 1);
 			pall = 0;
 			goto next;
-		} else if (shorthand && ((*p >= '0' && *p <= '9') ||
-		    *p == '+' || *p == '-' || *p == '.')) {
+		} else if (shorthand) {
 			/*
 			 * Input: `dev=N` -> shorthand for `dev.volume=N`.
 			 *

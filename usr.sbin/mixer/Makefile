@@ -1,9 +1,8 @@
 # $FreeBSD$
 
-#.include <src.opts.mk>
+.include <src.opts.mk>
 
 PROG=		mixer
-BINDIR=         /usr/sbin
 SRCS=		${PROG}.c
 MAN=		${PROG}.8
 LDFLAGS+=	-lmixer

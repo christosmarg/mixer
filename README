@@ -8,6 +8,6 @@ system in FreeBSD 14.0.
 Usage
 -----
 	$ make
-	# make install clean
+	# make install clean cleandepend
 
 Report any bugs to <christos@FreeBSD.org>.
